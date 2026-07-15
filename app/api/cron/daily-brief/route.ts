@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPillars, getWorkstreams, getTasks } from '@/lib/airtable';
 import { buildViewModel } from '@/lib/model';
 import { formatBriefMessage } from '@/lib/brief';
+import { listEventsInRange } from '@/lib/googleCalendar';
+import { londonTodayRange } from '@/lib/dates';
+import { eventsOnDay } from '@/lib/calendarView';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,10 +43,29 @@ export async function GET(req: NextRequest) {
   try {
     const [pillars, workstreams, tasks] = await Promise.all([getPillars(), getWorkstreams(), getTasks()]);
     const { openTasks } = buildViewModel(pillars, workstreams, tasks, []);
-    const message = formatBriefMessage(openTasks, now);
+
+    // Calendar is best-effort: if it's unconfigured or Google has a bad
+    // moment, the task-based brief should still go out rather than nothing.
+    let calendarEvents: { time: string; label: string }[] = [];
+    let calendarError: string | null = null;
+    try {
+      const { start, end } = londonTodayRange(now);
+      const events = await listEventsInRange(start, end);
+      calendarEvents = eventsOnDay(events, start);
+    } catch (err) {
+      calendarError = err instanceof Error ? err.message : String(err);
+    }
+
+    const message = formatBriefMessage(openTasks, calendarEvents, now);
 
     if (dryRun) {
-      return NextResponse.json({ dryRun: true, message, taskCount: openTasks.length });
+      return NextResponse.json({
+        dryRun: true,
+        message,
+        taskCount: openTasks.length,
+        calendarEventCount: calendarEvents.length,
+        calendarError,
+      });
     }
 
     const phone = process.env.BRIEF_PHONE;
@@ -59,7 +81,13 @@ export async function GET(req: NextRequest) {
     });
     const smsJson = await smsRes.json();
 
-    return NextResponse.json({ sent: !!smsJson.success, textbelt: smsJson, taskCount: openTasks.length });
+    return NextResponse.json({
+      sent: !!smsJson.success,
+      textbelt: smsJson,
+      taskCount: openTasks.length,
+      calendarEventCount: calendarEvents.length,
+      calendarError,
+    });
   } catch (err) {
     return NextResponse.json({ error: String(err instanceof Error ? err.message : err) }, { status: 502 });
   }
