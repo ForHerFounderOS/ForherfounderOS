@@ -48,6 +48,7 @@ export type PillarFields = {
   Name: string;
   Progress?: number; // 0..1
   Active?: boolean;
+  Primary?: boolean; // optional — add this checkbox field in Airtable to stop relying on name matching
   Workstreams?: string[];
 };
 export type WorkstreamFields = {
