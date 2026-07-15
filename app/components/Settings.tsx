@@ -137,19 +137,26 @@ export default function Settings({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#2B2118' }}>{p.name}</div>
                 <div style={{ fontSize: 12, color: '#A79A8A', marginTop: 2 }}>
-                  {p.active ? 'Active — reporting everywhere' : 'Dormant — hidden from Home, Progress and the Board Meeting'}
+                  {p.primary
+                    ? 'Primary — always on'
+                    : p.active
+                    ? 'Active — reporting everywhere'
+                    : 'Dormant — hidden from Home, Progress and the Board Meeting'}
                 </div>
               </div>
               <button
-                onClick={() => onTogglePillar(p.id, !p.active)}
+                onClick={p.primary ? undefined : () => onTogglePillar(p.id, !p.active)}
+                disabled={p.primary}
+                title={p.primary ? 'ForHer is locked as the primary pillar' : undefined}
                 style={{
                   position: 'relative',
                   width: 42,
                   height: 24,
                   borderRadius: 99,
                   border: 'none',
-                  cursor: 'pointer',
-                  background: p.active ? p.color : '#DDD2C1',
+                  cursor: p.primary ? 'default' : 'pointer',
+                  background: p.primary || p.active ? p.color : '#DDD2C1',
+                  opacity: p.primary ? 0.6 : 1,
                   padding: 0,
                   flexShrink: 0,
                 }}
@@ -158,7 +165,7 @@ export default function Settings({
                   style={{
                     position: 'absolute',
                     top: 3,
-                    left: p.active ? 21 : 3,
+                    left: p.primary || p.active ? 21 : 3,
                     width: 18,
                     height: 18,
                     borderRadius: '50%',
