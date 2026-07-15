@@ -1,7 +1,13 @@
 import type { ViewTask } from './model';
 
+export type BriefCalEvent = { time: string; label: string };
+
 // SMS body only — Textbelt sends plain text, so no markdown/bold.
-export function formatBriefMessage(openTasks: ViewTask[], now: Date = new Date()): string {
+export function formatBriefMessage(
+  openTasks: ViewTask[],
+  calendarEvents: BriefCalEvent[] = [],
+  now: Date = new Date()
+): string {
   const dayLabel = now.toLocaleDateString('en-GB', {
     weekday: 'long',
     day: 'numeric',
@@ -9,16 +15,31 @@ export function formatBriefMessage(openTasks: ViewTask[], now: Date = new Date()
     timeZone: 'Europe/London',
   });
 
+  const lines: string[] = [];
+  lines.push(`Good morning. Here's ${dayLabel}:`);
+  lines.push('');
+
+  if (calendarEvents.length) {
+    lines.push("Today's calendar:");
+    for (const e of calendarEvents.slice(0, 6)) {
+      lines.push(`${e.time} ${e.label}`);
+    }
+  } else {
+    lines.push("Today's calendar: nothing scheduled.");
+  }
+
   if (openTasks.length === 0) {
-    return `Good morning. Nothing open for ${dayLabel} — a clean slate. — Command Center`;
+    lines.push('');
+    lines.push('Nothing open on the task list — a clean slate.');
+    lines.push('');
+    lines.push('One thing at a time. You’ve got this.');
+    return lines.join('\n');
   }
 
   const [firstMove, ...restAll] = openTasks;
   const rest = restAll.slice(0, 3);
   const overdueCount = openTasks.filter((t) => t.overdue).length;
 
-  const lines: string[] = [];
-  lines.push(`Good morning. Here's ${dayLabel}:`);
   lines.push('');
   lines.push(
     `First move: ${firstMove.label} (${firstMove.pillarName}${
