@@ -53,6 +53,16 @@ function deadlineLabel(iso: string | null | undefined): { label: string | null; 
   return { label: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), overdue: false };
 }
 
+// Falls back to matching this name when the Pillars table has no "Primary"
+// checkbox field yet. Add a "Primary" checkbox in Airtable and check it on
+// ForHer to stop depending on the name match.
+const PRIMARY_PILLAR_NAME = 'forher';
+
+function isPrimaryPillar(p: AirtableRecord<PillarFields>, hasPrimaryField: boolean): boolean {
+  if (hasPrimaryField) return !!p.fields.Primary;
+  return (p.fields.Name || '').trim().toLowerCase() === PRIMARY_PILLAR_NAME;
+}
+
 export function buildViewModel(
   pillarRecs: AirtableRecord<PillarFields>[],
   workstreamRecs: AirtableRecord<WorkstreamFields>[],
@@ -90,6 +100,8 @@ export function buildViewModel(
     return open[0];
   }
 
+  const hasPrimaryField = pillarRecs.some((p) => typeof p.fields.Primary === 'boolean');
+
   const pillars: ViewPillar[] = pillarRecs.map((p, i) => {
     const workstreams = workstreamsByPillar.get(p.id) || [];
     const wsView: ViewWorkstream[] = workstreams.map((w) => {
@@ -119,7 +131,7 @@ export function buildViewModel(
     return {
       id: p.id,
       name: p.fields.Name,
-      primary: i === 0,
+      primary: isPrimaryPillar(p, hasPrimaryField),
       active: !!p.fields.Active,
       color: COLORS[i % COLORS.length],
       colorSoft: COLORS_SOFT[i % COLORS_SOFT.length],
