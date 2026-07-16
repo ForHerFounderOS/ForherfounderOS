@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPillars, getWorkstreams, getTasks } from '@/lib/airtable';
 import { buildViewModel } from '@/lib/model';
 import { formatBriefMessage } from '@/lib/brief';
-import { listEventsInRange } from '@/lib/googleCalendar';
+import { listEventsInRange } from '@/lib/icsCalendar';
 import { londonTodayRange } from '@/lib/dates';
 import { eventsOnDay } from '@/lib/calendarView';
 
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     const [pillars, workstreams, tasks] = await Promise.all([getPillars(), getWorkstreams(), getTasks()]);
     const { openTasks } = buildViewModel(pillars, workstreams, tasks, []);
 
-    // Calendar is best-effort: if it's unconfigured or Google has a bad
+    // Calendar is best-effort: if it's unconfigured or a feed has a bad
     // moment, the task-based brief should still go out rather than nothing.
     let calendarEvents: { time: string; label: string }[] = [];
     let calendarError: string | null = null;
