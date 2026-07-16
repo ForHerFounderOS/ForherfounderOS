@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import type { CalEvent } from './googleCalendar';
+import type { CalEvent } from './icsCalendar';
 
 const ZONE = 'Europe/London';
 
