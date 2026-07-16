@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { listEventsInRange } from '@/lib/googleCalendar';
+import { listEventsInRange } from '@/lib/icsCalendar';
 import { londonWorkWeekRange } from '@/lib/dates';
 import { groupByWorkWeek, summarizeWeek } from '@/lib/calendarView';
 
