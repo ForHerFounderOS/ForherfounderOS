@@ -58,7 +58,7 @@ export default function Page() {
         {screen === 'home' && (
           <Home pillars={pillars} openTasks={openTasks} loading={loading} error={error} onToggleTask={toggleTaskDone} />
         )}
-        {screen === 'brief' && <DailyBriefing />}
+        {screen === 'brief' && <DailyBriefing openTasks={openTasks} tasksLoading={loading} tasksError={error} />}
         {screen === 'calendar' && <CalendarIntelligence />}
         {screen === 'progress' && <Progress pillars={pillars} stats={stats} board={board} />}
         {screen === 'knowledge' && <Knowledge />}
