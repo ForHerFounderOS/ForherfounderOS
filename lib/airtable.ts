@@ -70,12 +70,18 @@ export type ParkingLotFields = {
   'Date added'?: string;
   Status?: string;
 };
+export type KnowledgeFields = {
+  Text: string;
+  Type?: string;
+  Date?: string;
+};
 
 export const TABLES = {
   pillars: 'Pillars',
   workstreams: 'Workstreams',
   tasks: 'Tasks',
   parkingLot: 'Parking Lot',
+  knowledge: 'Knowledge',
 } as const;
 
 export function getPillars() {
@@ -89,6 +95,9 @@ export function getTasks() {
 }
 export function getParkingLot() {
   return listAll<ParkingLotFields>(TABLES.parkingLot);
+}
+export function getKnowledge() {
+  return listAll<KnowledgeFields>(TABLES.knowledge);
 }
 
 export function updateTaskDone(id: string, done: boolean) {
