@@ -1,18 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { serif, sans } from '@/lib/theme';
+import { useEffect, useState } from 'react';
+import { serif } from '@/lib/theme';
 import type { ViewPillar } from '@/lib/model';
-
-type Conn = { calendar: boolean; cowork: boolean };
-
-function loadConn(): Conn {
-  try {
-    const saved = JSON.parse(localStorage.getItem('fcc-connections') || 'null');
-    if (saved) return saved;
-  } catch {}
-  return { calendar: false, cowork: false };
-}
 
 export default function Settings({
   pillars,
@@ -25,19 +15,30 @@ export default function Settings({
   error: string | null;
   onTogglePillar: (id: string, active: boolean) => void;
 }) {
-  const [conn, setConn] = useState<Conn>(loadConn);
+  const [calLoading, setCalLoading] = useState(true);
+  const [calError, setCalError] = useState<string | null>(null);
 
-  const toggleConn = (key: keyof Conn) => {
-    setConn((c) => {
-      const next = { ...c, [key]: !c[key] };
-      try {
-        localStorage.setItem('fcc-connections', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/calendar')
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        setCalError(json.error || null);
+      })
+      .catch((err) => {
+        if (!cancelled) setCalError(err instanceof Error ? err.message : 'Failed to load');
+      })
+      .finally(() => {
+        if (!cancelled) setCalLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const airtableOn = !error && !loading;
+  const calendarOn = !calError && !calLoading;
 
   const rows = [
     {
@@ -46,23 +47,17 @@ export default function Settings({
       role: "Tasks, workstreams and pillar data — the system's source of truth.",
       on: airtableOn,
       status: loading ? 'Connecting…' : airtableOn ? 'Connected · live' : 'Connection error — check server credentials',
-      locked: true,
     },
     {
       id: 'calendar',
       name: 'Calendar',
-      role: 'Powers Calendar Intelligence and the shape of your day.',
-      on: conn.calendar,
-      status: conn.calendar ? 'Connected · example state' : 'Not connected',
-      locked: false,
-    },
-    {
-      id: 'cowork',
-      name: 'Cowork / iMessage',
-      role: 'Delivers the Daily Briefing to you each morning.',
-      on: conn.cowork,
-      status: conn.cowork ? 'Connected · example state' : 'Not connected',
-      locked: false,
+      role: 'Powers Calendar Intelligence and the daily brief.',
+      on: calendarOn,
+      status: calLoading
+        ? 'Connecting…'
+        : calendarOn
+        ? 'Connected · live'
+        : 'Connection error — check CALENDAR_ICS_URLS',
     },
   ];
 
@@ -100,25 +95,6 @@ export default function Settings({
                   <span style={{ fontSize: 12, color: c.on ? '#4A5A3C' : '#A79A8A', fontWeight: 500 }}>{c.status}</span>
                 </div>
               </div>
-              {!c.locked && (
-                <button
-                  onClick={() => toggleConn(c.id as keyof Conn)}
-                  style={{
-                    flexShrink: 0,
-                    cursor: 'pointer',
-                    fontFamily: sans,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    padding: '8px 16px',
-                    borderRadius: 8,
-                    background: c.on ? 'transparent' : '#A33757',
-                    color: c.on ? '#7A6E60' : '#FFF3EC',
-                    border: `1px solid ${c.on ? '#DDD2C1' : '#A33757'}`,
-                  }}
-                >
-                  {c.on ? 'Disconnect' : 'Connect'}
-                </button>
-              )}
             </div>
           ))}
         </div>
