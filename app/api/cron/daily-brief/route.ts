@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Resend } from 'resend';
 import { getPillars, getWorkstreams, getTasks } from '@/lib/airtable';
 import { buildViewModel } from '@/lib/model';
 import { formatBriefMessage, formatBriefSubject } from '@/lib/brief';
@@ -89,19 +90,17 @@ export async function GET(req: NextRequest) {
     const to = process.env.BRIEF_EMAIL || 'Valerie.ayeni@icloud.com';
     const from = process.env.RESEND_FROM || 'Founder Command Center <onboarding@resend.dev>';
 
-    const emailRes = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ from, to, subject: formatBriefSubject(now), text: message }),
+    const resend = new Resend(apiKey);
+    const { data, error: sendError } = await resend.emails.send({
+      from,
+      to,
+      subject: formatBriefSubject(now),
+      text: message,
     });
-    const emailJson = await emailRes.json();
 
     return NextResponse.json({
-      sent: emailRes.ok,
-      resend: emailJson,
+      sent: !sendError,
+      resend: sendError || data,
       taskCount: openTasks.length,
       calendarEventCount: calendarEvents.length,
       calendarError,
