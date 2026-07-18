@@ -22,8 +22,15 @@ function isNineAmLondon(date: Date): boolean {
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
+  // Vercel's real cron firing sends the secret as a header. A query param is
+  // also accepted so this can be triggered from a plain browser address bar
+  // (no way to set a custom header there) — same secret, just a second way
+  // to present it. Don't share a URL containing it; it'll sit in browser
+  // history same as any bookmarked secret link.
+  const querySecret = req.nextUrl.searchParams.get('secret');
   const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  const authorized = !!cronSecret && (authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret);
+  if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -31,8 +38,11 @@ export async function GET(req: NextRequest) {
   // ?dryRun=1 composes and returns the message without sending or requiring
   // it to actually be 9am — useful for testing via `vercel crons run`.
   const dryRun = req.nextUrl.searchParams.get('dryRun') === '1';
+  // ?test=1 bypasses the 9am gate AND actually sends — for confirming
+  // BRIEF_PHONE/TEXTBELT_KEY work right now instead of waiting until morning.
+  const test = req.nextUrl.searchParams.get('test') === '1';
 
-  if (!dryRun && !isNineAmLondon(now)) {
+  if (!dryRun && !test && !isNineAmLondon(now)) {
     return NextResponse.json({
       skipped: true,
       reason: 'Not 9am Europe/London at this firing',
