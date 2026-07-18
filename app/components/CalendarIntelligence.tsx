@@ -59,7 +59,7 @@ export default function CalendarIntelligence() {
             borderRadius: 99,
           }}
         >
-          {loading ? 'Loading…' : error ? 'Connection error' : 'Live · Google Calendar'}
+          {loading ? 'Loading…' : error ? 'Connection error' : 'Live · Calendar'}
         </span>
       </div>
       <p style={{ margin: '10px 0 0 0', fontSize: 14, color: '#7A6E60', maxWidth: 560, lineHeight: 1.55 }}>
@@ -78,7 +78,7 @@ export default function CalendarIntelligence() {
             color: '#6E3018',
           }}
         >
-          Couldn&rsquo;t reach Google Calendar: {error}
+          Couldn&rsquo;t reach the calendar feed: {error}
         </div>
       )}
 
