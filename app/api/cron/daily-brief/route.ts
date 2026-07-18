@@ -86,8 +86,9 @@ export async function GET(req: NextRequest) {
     // Recipient defaults to Valerie's own address; override with BRIEF_EMAIL
     // if the brief should go elsewhere. RESEND_FROM defaults to Resend's
     // shared sandbox sender, which — without a verified sending domain — can
-    // only deliver to the email address the Resend account was created with.
-    const to = process.env.BRIEF_EMAIL || 'Valerie.ayeni@icloud.com';
+    // only deliver to the email address the Resend account was created with,
+    // and that check is case-sensitive, so this must match exactly.
+    const to = process.env.BRIEF_EMAIL || 'valerie.ayeni@icloud.com';
     const from = process.env.RESEND_FROM || 'Founder Command Center <onboarding@resend.dev>';
 
     const resend = new Resend(apiKey);
