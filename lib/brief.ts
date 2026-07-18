@@ -2,21 +2,27 @@ import type { ViewTask } from './model';
 
 export type BriefCalEvent = { time: string; label: string };
 
-// SMS body only — Textbelt sends plain text, so no markdown/bold.
-export function formatBriefMessage(
-  openTasks: ViewTask[],
-  calendarEvents: BriefCalEvent[] = [],
-  now: Date = new Date()
-): string {
-  const dayLabel = now.toLocaleDateString('en-GB', {
+function dayLabel(now: Date): string {
+  return now.toLocaleDateString('en-GB', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     timeZone: 'Europe/London',
   });
+}
 
+export function formatBriefSubject(now: Date = new Date()): string {
+  return `Your daily brief — ${dayLabel(now)}`;
+}
+
+// Plain text email body — no markdown/HTML, matches the terse, no-fuss tone.
+export function formatBriefMessage(
+  openTasks: ViewTask[],
+  calendarEvents: BriefCalEvent[] = [],
+  now: Date = new Date()
+): string {
   const lines: string[] = [];
-  lines.push(`Good morning. Here's ${dayLabel}:`);
+  lines.push(`Good morning. Here's ${dayLabel(now)}:`);
   lines.push('');
 
   if (calendarEvents.length) {

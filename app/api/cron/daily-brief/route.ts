@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPillars, getWorkstreams, getTasks } from '@/lib/airtable';
 import { buildViewModel } from '@/lib/model';
-import { formatBriefMessage } from '@/lib/brief';
+import { formatBriefMessage, formatBriefSubject } from '@/lib/brief';
 import { listEventsInRange } from '@/lib/icsCalendar';
 import { londonTodayRange } from '@/lib/dates';
 import { eventsOnDay } from '@/lib/calendarView';
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   // it to actually be 9am — useful for testing via `vercel crons run`.
   const dryRun = req.nextUrl.searchParams.get('dryRun') === '1';
   // ?test=1 bypasses the 9am gate AND actually sends — for confirming
-  // BRIEF_PHONE/TEXTBELT_KEY work right now instead of waiting until morning.
+  // RESEND_API_KEY/BRIEF_EMAIL work right now instead of waiting until morning.
   const test = req.nextUrl.searchParams.get('test') === '1';
 
   if (!dryRun && !test && !isNineAmLondon(now)) {
@@ -78,22 +78,30 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const phone = process.env.BRIEF_PHONE;
-    const key = process.env.TEXTBELT_KEY;
-    if (!phone || !key) {
-      return NextResponse.json({ error: 'BRIEF_PHONE or TEXTBELT_KEY is not set' }, { status: 500 });
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: 'RESEND_API_KEY is not set' }, { status: 500 });
     }
+    // Recipient defaults to Valerie's own address; override with BRIEF_EMAIL
+    // if the brief should go elsewhere. RESEND_FROM defaults to Resend's
+    // shared sandbox sender, which — without a verified sending domain — can
+    // only deliver to the email address the Resend account was created with.
+    const to = process.env.BRIEF_EMAIL || 'Valerie.ayeni@icloud.com';
+    const from = process.env.RESEND_FROM || 'Founder Command Center <onboarding@resend.dev>';
 
-    const smsRes = await fetch('https://textbelt.com/text', {
+    const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, message, key }),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from, to, subject: formatBriefSubject(now), text: message }),
     });
-    const smsJson = await smsRes.json();
+    const emailJson = await emailRes.json();
 
     return NextResponse.json({
-      sent: !!smsJson.success,
-      textbelt: smsJson,
+      sent: emailRes.ok,
+      resend: emailJson,
       taskCount: openTasks.length,
       calendarEventCount: calendarEvents.length,
       calendarError,
