@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { serif, sans } from '@/lib/theme';
 import type { ViewPillar, PeriodStats, PeriodTask } from '@/lib/model';
 import type { BoardState } from './BoardMeeting';
+import TaskDetailModal from './TaskDetail';
 
 // The agreed scope of the ForHer roadmap — fixed at 24 workstreams regardless
 // of how many happen to be in Airtable right now, so Overall tracks progress
@@ -77,14 +78,26 @@ function DetailCard({ title, children }: { title: string; children: React.ReactN
   );
 }
 
-function PeriodTaskList({ items }: { items: PeriodTask[] }) {
+function PeriodTaskList({
+  items,
+  emptyText,
+  onSelect,
+}: {
+  items: PeriodTask[];
+  emptyText: string;
+  onSelect: (t: PeriodTask) => void;
+}) {
   if (items.length === 0) {
-    return <div style={{ padding: '13px 0', fontSize: 13, color: '#A79A8A' }}>Nothing due in this period.</div>;
+    return <div style={{ padding: '13px 0', fontSize: 13, color: '#A79A8A' }}>{emptyText}</div>;
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {items.map((t) => (
-        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderTop: '1px solid #F3EDE1' }}>
+        <div
+          key={t.id}
+          onClick={() => onSelect(t)}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderTop: '1px solid #F3EDE1', cursor: 'pointer' }}
+        >
           <span style={{ color: t.done ? '#A33757' : '#C4B7A5', fontSize: 13, flexShrink: 0 }}>{t.done ? '✓' : '○'}</span>
           <span
             style={{
@@ -109,14 +122,17 @@ export default function Progress({
   board,
   monthly,
   quarterly,
+  onToggleTask,
 }: {
   pillars: ViewPillar[];
   stats: { total: number; completed: number; open: number; overdue: number };
   board: BoardState;
   monthly: PeriodStats;
   quarterly: PeriodStats;
+  onToggleTask: (id: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>('overall');
+  const [selectedTask, setSelectedTask] = useState<PeriodTask | null>(null);
 
   const activePillars = pillars.filter((p) => p.primary || p.active);
   const filledOutcomes = board.outcomes.map((o, i) => ({ label: o, done: !!board.outcomesDone[i] })).filter((o) => o.label.trim());
@@ -233,10 +249,14 @@ export default function Progress({
             barFrom="#C285B0"
             barTo="#8A4F79"
             barBg="#EEE1F0"
-            footnote="Tasks with a deadline this quarter, from Airtable — completed vs. total."
+            footnote="Everything with a real deadline this quarter — not what feels urgent, what's actually due."
           />
           <DetailCard title="This quarter's tasks">
-            <PeriodTaskList items={quarterly.items} />
+            <PeriodTaskList
+              items={quarterly.items}
+              emptyText="Nothing due this quarter yet — plenty of runway."
+              onSelect={setSelectedTask}
+            />
           </DetailCard>
         </div>
       )}
@@ -251,10 +271,14 @@ export default function Progress({
             barFrom="#C285B0"
             barTo="#8A4F79"
             barBg="#EEE1F0"
-            footnote="Tasks with a deadline this month, from Airtable — completed vs. total."
+            footnote="Everything with a real deadline this month — not what feels urgent, what's actually due."
           />
           <DetailCard title="This month's tasks">
-            <PeriodTaskList items={monthly.items} />
+            <PeriodTaskList
+              items={monthly.items}
+              emptyText="Nothing due this month yet — plenty of runway."
+              onSelect={setSelectedTask}
+            />
           </DetailCard>
         </div>
       )}
@@ -273,7 +297,7 @@ export default function Progress({
           />
           <DetailCard title="This week's outcomes">
             {filledOutcomes.length === 0 && (
-              <div style={{ padding: '13px 0', fontSize: 13, color: '#A79A8A' }}>No outcomes set yet — add them at the Board Meeting.</div>
+              <div style={{ padding: '13px 0', fontSize: 13, color: '#A79A8A' }}>No outcomes set yet — that&rsquo;s what Sunday&rsquo;s for.</div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: filledOutcomes.length ? 8 : 0 }}>
               {filledOutcomes.map((o, i) => (
@@ -285,6 +309,10 @@ export default function Progress({
             </div>
           </DetailCard>
         </div>
+      )}
+
+      {selectedTask && (
+        <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} onToggleDone={onToggleTask} />
       )}
     </div>
   );
