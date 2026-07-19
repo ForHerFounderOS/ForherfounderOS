@@ -28,7 +28,7 @@ export default function Page() {
   const [screen, setScreen] = useState<Screen>('home');
   const [board, setBoard] = useState<BoardState>(loadBoard);
 
-  const { data, loading, error, toggleTaskDone, togglePillarActive, addParkingItem, removeParkingItem } = useAppData();
+  const { data, loading, error, refresh, toggleTaskDone, togglePillarActive, addParkingItem, removeParkingItem } = useAppData();
 
   useEffect(() => {
     // Client-only mount gate: avoids SSR/client hydration mismatch on time-of-day
@@ -65,7 +65,7 @@ export default function Page() {
             loading={loading}
             error={error}
             onToggleTask={toggleTaskDone}
-            board={board}
+            firstMove={data?.firstMove || null}
           />
         )}
         {screen === 'brief' && <DailyBriefing openTasks={openTasks} tasksLoading={loading} tasksError={error} />}
@@ -83,7 +83,7 @@ export default function Page() {
         {screen === 'knowledge' && <Knowledge />}
         {screen === 'journal' && <Journal />}
         {screen === 'board' && (
-          <BoardMeeting pillars={pillars} board={board} setBoard={setBoard} onClose={() => setScreen('home')} />
+          <BoardMeeting pillars={pillars} board={board} setBoard={setBoard} onClose={() => setScreen('home')} refresh={refresh} />
         )}
         {screen === 'settings' && (
           <Settings pillars={pillars} loading={loading} error={error} onTogglePillar={togglePillarActive} />

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { serif, sans } from '@/lib/theme';
 import type { ViewPillar, ViewTask } from '@/lib/model';
-import type { BoardState } from './BoardMeeting';
+import type { ViewCalDay } from '@/lib/calendarView';
 import TaskDetailModal from './TaskDetail';
 
 const GREETING_NAME = '';
@@ -94,7 +94,7 @@ export default function Home({
   loading,
   error,
   onToggleTask,
-  board,
+  firstMove,
 }: {
   pillars: ViewPillar[];
   openTasks: ViewTask[];
@@ -102,7 +102,7 @@ export default function Home({
   loading: boolean;
   error: string | null;
   onToggleTask: (id: string) => void;
-  board: BoardState;
+  firstMove: ViewTask | null;
 }) {
   const [restOpen, setRestOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -110,6 +110,7 @@ export default function Home({
   const [selectedTask, setSelectedTask] = useState<ViewTask | null>(null);
   const [lastVisit, setLastVisit] = useState<Snapshot | null>(null);
   const [lastVisitLoaded, setLastVisitLoaded] = useState(false);
+  const [todayCalMinutes, setTodayCalMinutes] = useState<number | null>(null);
   const snapshotSaved = useRef(false);
 
   useEffect(() => {
@@ -117,6 +118,27 @@ export default function Home({
     setEnergyLog(loadEnergyLog());
     setLastVisit(loadSnapshot());
     setLastVisitLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    // Real calendar load, not a guess — a day stacked with lectures or a work
+    // shift should visibly shrink what "Rest of today" suggests, the same way
+    // low energy already does.
+    let cancelled = false;
+    fetch('/api/calendar')
+      .then((res) => res.json())
+      .then((json: { days?: ViewCalDay[] }) => {
+        if (cancelled || !json.days) return;
+        const today = json.days.find((d) => d.isToday);
+        const minutes = today
+          ? today.events.reduce((sum, e) => (e.allDay ? sum : sum + (e.durationMinutes || 0)), 0)
+          : null;
+        setTodayCalMinutes(minutes);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -140,15 +162,21 @@ export default function Home({
   const lowStreak = todayEnergy === 'low' ? lowStreakEndingToday(energyLog) : 0;
   // Two-plus low days running keeps only the single most pressing item;
   // one low day trims to a short list. Otherwise, show everything as usual.
-  const taskCap = lowStreak >= 2 ? 1 : lowStreak === 1 ? 3 : Infinity;
+  const energyCap = lowStreak >= 2 ? 1 : lowStreak === 1 ? 3 : Infinity;
+  // A day already carrying 6+ hours of calendar commitments (lectures, a work
+  // shift) gets the same single-item treatment as a low-energy day; 3+ hours
+  // trims to a short list — real calendar load, not a guess.
+  const calendarCap = todayCalMinutes === null ? Infinity : todayCalMinutes >= 360 ? 1 : todayCalMinutes >= 180 ? 3 : Infinity;
+  const taskCap = Math.min(energyCap, calendarCap);
+  const limitedByCalendar = calendarCap < Infinity && calendarCap <= energyCap;
 
   const activePillars = pillars.filter((p) => p.primary || p.active);
   // Rest of today mirrors First Move: nothing's been deliberately planned
   // until a Board Meeting has actually run, so don't dump the raw task list.
-  const boardHasRun = !!board.planPriority;
-  const rest = boardHasRun ? openTasks : [];
+  const boardHasRun = !!firstMove;
+  const rest = boardHasRun ? openTasks.filter((t) => t.id !== firstMove?.id) : [];
   const visibleRest = Number.isFinite(taskCap) ? rest.slice(0, taskCap) : rest;
-  const hiddenByEnergy = rest.length - visibleRest.length;
+  const hiddenCount = rest.length - visibleRest.length;
   const allDone = !loading && boardHasRun && openTasks.length === 0;
 
   type MovementNote = { text: string; delta: number };
@@ -354,6 +382,11 @@ export default function Home({
                 Low energy today — showing fewer suggestions.
               </div>
             )}
+            {limitedByCalendar && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#A79A8A', lineHeight: 1.5 }}>
+                {`Today’s calendar already has ${Math.round(((todayCalMinutes || 0) / 60) * 10) / 10}h booked — keeping suggestions light.`}
+              </div>
+            )}
           </div>
 
           {allDone && (
@@ -371,22 +404,31 @@ export default function Home({
             </div>
           )}
 
-          {board.planPriority ? (
-            <div
+          {firstMove ? (
+            <button
+              onClick={() => setSelectedTask(firstMove)}
               style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                border: 'none',
+                cursor: 'pointer',
                 background: 'linear-gradient(150deg, #A33757, #852E4E)',
                 color: '#FFF3EC',
                 borderRadius: 14,
                 padding: '20px 22px',
                 boxShadow: '0 2px 4px rgba(87, 38, 63, 0.2), 0 14px 32px rgba(87, 38, 63, 0.28)',
+                fontFamily: 'inherit',
               }}
             >
               <div style={{ fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#F9CBBE' }}>First move</div>
               <div style={{ marginTop: 10, fontFamily: serif, fontSize: 18.5, lineHeight: 1.4, fontWeight: 400 }}>
-                {board.planPriority}
+                {firstMove.label}
               </div>
-              <div style={{ marginTop: 6, fontSize: 12.5, color: '#F6BBAF' }}>Set at Sunday&rsquo;s Board Meeting.</div>
-            </div>
+              <div style={{ marginTop: 6, fontSize: 12.5, color: '#F6BBAF' }}>
+                {`Top priority for ${firstMove.workstreamName || 'this week'} · set at Sunday’s Board Meeting.`}
+              </div>
+            </button>
           ) : (
             <div style={{ background: '#F1EBE0', border: '1px solid #DDD2C1', borderRadius: 14, padding: '20px 22px' }}>
               <div style={{ fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#A79A8A' }}>First move</div>
@@ -476,9 +518,11 @@ export default function Home({
                   {rest.length === 0 && (
                     <div style={{ padding: '10px 12px', fontSize: 13, color: '#A79A8A' }}>Nothing else queued.</div>
                   )}
-                  {hiddenByEnergy > 0 && (
+                  {hiddenCount > 0 && (
                     <div style={{ padding: '8px 12px 4px 12px', fontSize: 12, color: '#A79A8A', fontStyle: 'italic' }}>
-                      {`${hiddenByEnergy} more hidden — energy’s low, keeping today light.`}
+                      {limitedByCalendar
+                        ? `${hiddenCount} more hidden — today’s calendar is packed, keeping the list light.`
+                        : `${hiddenCount} more hidden — energy’s low, keeping today light.`}
                     </div>
                   )}
                 </div>

@@ -10,6 +10,7 @@ const TAG_STYLES: Record<string, { tagColor: string; tagBg: string }> = {
   Research: { tagColor: '#8A4F79', tagBg: '#F4E2EE' },
   'Parked idea': { tagColor: '#8F5A12', tagBg: '#F6E8CF' },
   Pattern: { tagColor: '#4A5A3C', tagBg: '#EEF0E6' },
+  'Weekly Review': { tagColor: '#4C6B8A', tagBg: '#E4EBF2' },
 };
 const DEFAULT_TAG_STYLE = { tagColor: '#7A6E60', tagBg: '#F1EBE0' };
 

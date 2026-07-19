@@ -11,6 +11,7 @@ type Data = {
   stats: Stats;
   monthly: PeriodStats;
   quarterly: PeriodStats;
+  firstMove: ViewTask | null;
 };
 
 export function useAppData() {
