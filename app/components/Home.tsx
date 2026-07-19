@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { serif, sans } from '@/lib/theme';
 import type { ViewPillar, ViewTask } from '@/lib/model';
 import type { BoardState } from './BoardMeeting';
@@ -67,9 +67,29 @@ function lowStreakEndingToday(log: EnergyEntry[]): number {
   return streak;
 }
 
+type Snapshot = { workstreamPct: Record<string, number>; completedCount: number };
+const SNAPSHOT_KEY = 'fcc-last-visit-snapshot';
+
+function loadSnapshot(): Snapshot | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || 'null');
+    return raw && typeof raw === 'object' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSnapshot(s: Snapshot) {
+  try {
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(s));
+  } catch {}
+}
+
 export default function Home({
   pillars,
   openTasks,
+  stats,
   loading,
   error,
   onToggleTask,
@@ -77,6 +97,7 @@ export default function Home({
 }: {
   pillars: ViewPillar[];
   openTasks: ViewTask[];
+  stats: { total: number; completed: number; open: number; overdue: number };
   loading: boolean;
   error: string | null;
   onToggleTask: (id: string) => void;
@@ -85,11 +106,25 @@ export default function Home({
   const [restOpen, setRestOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [energyLog, setEnergyLog] = useState<EnergyEntry[]>([]);
+  const [lastVisit, setLastVisit] = useState<Snapshot | null>(null);
+  const [lastVisitLoaded, setLastVisitLoaded] = useState(false);
+  const snapshotSaved = useRef(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEnergyLog(loadEnergyLog());
+    setLastVisit(loadSnapshot());
+    setLastVisitLoaded(true);
   }, []);
+
+  useEffect(() => {
+    if (!lastVisitLoaded || loading || error || snapshotSaved.current) return;
+    snapshotSaved.current = true;
+    saveSnapshot({
+      workstreamPct: Object.fromEntries(pillars.flatMap((p) => p.workstreams.map((w) => [w.id, w.pct]))),
+      completedCount: stats.completed,
+    });
+  }, [lastVisitLoaded, loading, error, pillars, stats]);
 
   const today = dateKey(new Date());
   const todayEnergy = energyLog.find((e) => e.date === today)?.level;
@@ -106,10 +141,35 @@ export default function Home({
   const taskCap = lowStreak >= 2 ? 1 : lowStreak === 1 ? 3 : Infinity;
 
   const activePillars = pillars.filter((p) => p.primary || p.active);
-  const rest = openTasks;
+  // Rest of today mirrors First Move: nothing's been deliberately planned
+  // until a Board Meeting has actually run, so don't dump the raw task list.
+  const boardHasRun = !!board.planPriority;
+  const rest = boardHasRun ? openTasks : [];
   const visibleRest = Number.isFinite(taskCap) ? rest.slice(0, taskCap) : rest;
   const hiddenByEnergy = rest.length - visibleRest.length;
-  const allDone = !loading && openTasks.length === 0;
+  const allDone = !loading && boardHasRun && openTasks.length === 0;
+
+  type MovementNote = { text: string; delta: number };
+  const movementNotes: MovementNote[] = [];
+  if (lastVisit) {
+    for (const p of pillars) {
+      for (const w of p.workstreams) {
+        const prevPct = lastVisit.workstreamPct[w.id];
+        if (typeof prevPct === 'number' && w.pct > prevPct) {
+          movementNotes.push({ text: `${w.name} moved to ${w.pct}% — up from ${prevPct}%.`, delta: w.pct - prevPct });
+        }
+      }
+    }
+    if (stats.completed > lastVisit.completedCount) {
+      const diff = stats.completed - lastVisit.completedCount;
+      movementNotes.push({
+        text: `${diff} more task${diff === 1 ? '' : 's'} completed since your last visit.`,
+        delta: diff * 5,
+      });
+    }
+  }
+  movementNotes.sort((a, b) => b.delta - a.delta);
+  const topMovementNotes = movementNotes.slice(0, 3);
 
   return (
     <div style={{ maxWidth: 1060, margin: '0 auto', padding: '40px 44px 140px 44px' }} className="fcc-fade-up">
@@ -142,14 +202,17 @@ export default function Home({
               Since you were last here
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13.5, lineHeight: 1.5, color: '#E6DCD0' }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <span style={{ color: '#9DB08F' }}>▲</span>
-                <span>Market research moved to 70% — competitor pricing table is nearly done.</span>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <span style={{ color: '#9DB08F' }}>▲</span>
-                <span>Two of Tuesday&rsquo;s interview leads replied. Both open to this week.</span>
-              </div>
+              {topMovementNotes.map((n, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ color: '#9DB08F' }}>▲</span>
+                  <span>{n.text}</span>
+                </div>
+              ))}
+              {topMovementNotes.length === 0 && (
+                <div>
+                  {lastVisit ? 'Nothing’s moved since your last visit — check back soon.' : 'Welcome — this fills in after your next visit.'}
+                </div>
+              )}
             </div>
           </div>
           <div style={{ background: 'rgba(191, 138, 61, 0.1)', border: '1px solid rgba(191, 138, 61, 0.28)', borderRadius: 12, padding: '16px 18px' }}>
@@ -270,76 +333,87 @@ export default function Home({
           )}
 
           {/* Rest of today */}
-          <div style={{ background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05), 0 8px 22px rgba(43, 33, 24, 0.07)', overflow: 'hidden' }}>
-            <button
-              onClick={() => setRestOpen((o) => !o)}
-              style={{
-                display: 'flex',
-                width: '100%',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                padding: '15px 20px',
-                fontFamily: sans,
-                fontSize: 13.5,
-                fontWeight: 500,
-                color: '#5C5145',
-              }}
-            >
-              <span>
-                Rest of today · {rest.length === 0 ? 'all done' : `${rest.length} item${rest.length === 1 ? '' : 's'}`}
-              </span>
-              <span style={{ color: '#A79A8A', fontSize: 11 }}>{restOpen ? '▲' : '▼'}</span>
-            </button>
-            {restOpen && (
-              <div style={{ borderTop: '1px solid #F0E9DD', padding: '6px 8px 10px 8px', display: 'flex', flexDirection: 'column' }}>
-                {visibleRest.map((task) => (
-                  <div key={task.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 9 }}>
-                    <button
-                      onClick={() => onToggleTask(task.id)}
-                      style={{
-                        width: 19,
-                        height: 19,
-                        flexShrink: 0,
-                        marginTop: 1,
-                        borderRadius: 6,
-                        cursor: 'pointer',
-                        border: '1.5px solid #C4B7A5',
-                        background: 'transparent',
-                        color: '#FFFDF8',
-                        fontSize: 11,
-                        lineHeight: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: 0,
-                      }}
-                    />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, lineHeight: 1.45, color: '#3A2F24' }}>{task.label}</div>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 11, color: '#A79A8A' }}>
-                          {task.pillarName}
-                          {task.workstreamName ? ` · ${task.workstreamName}` : ''}
-                        </span>
-                        {task.deadlineLabel && <span style={badgeStyle}>{task.deadlineLabel}</span>}
+          {!boardHasRun ? (
+            <div style={{ background: '#F1EBE0', border: '1px solid #DDD2C1', borderRadius: 14, padding: '20px 22px' }}>
+              <div style={{ fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#A79A8A' }}>
+                Rest of today
+              </div>
+              <div style={{ marginTop: 10, fontSize: 13.5, lineHeight: 1.5, color: '#7A6E60' }}>
+                Nothing queued yet — runs at Sunday&rsquo;s Board Meeting.
+              </div>
+            </div>
+          ) : (
+            <div style={{ background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05), 0 8px 22px rgba(43, 33, 24, 0.07)', overflow: 'hidden' }}>
+              <button
+                onClick={() => setRestOpen((o) => !o)}
+                style={{
+                  display: 'flex',
+                  width: '100%',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  padding: '15px 20px',
+                  fontFamily: sans,
+                  fontSize: 13.5,
+                  fontWeight: 500,
+                  color: '#5C5145',
+                }}
+              >
+                <span>
+                  Rest of today · {rest.length === 0 ? 'all done' : `${rest.length} item${rest.length === 1 ? '' : 's'}`}
+                </span>
+                <span style={{ color: '#A79A8A', fontSize: 11 }}>{restOpen ? '▲' : '▼'}</span>
+              </button>
+              {restOpen && (
+                <div style={{ borderTop: '1px solid #F0E9DD', padding: '6px 8px 10px 8px', display: 'flex', flexDirection: 'column' }}>
+                  {visibleRest.map((task) => (
+                    <div key={task.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 9 }}>
+                      <button
+                        onClick={() => onToggleTask(task.id)}
+                        style={{
+                          width: 19,
+                          height: 19,
+                          flexShrink: 0,
+                          marginTop: 1,
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          border: '1.5px solid #C4B7A5',
+                          background: 'transparent',
+                          color: '#FFFDF8',
+                          fontSize: 11,
+                          lineHeight: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: 0,
+                        }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, lineHeight: 1.45, color: '#3A2F24' }}>{task.label}</div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 11, color: '#A79A8A' }}>
+                            {task.pillarName}
+                            {task.workstreamName ? ` · ${task.workstreamName}` : ''}
+                          </span>
+                          {task.deadlineLabel && <span style={badgeStyle}>{task.deadlineLabel}</span>}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-                {rest.length === 0 && (
-                  <div style={{ padding: '10px 12px', fontSize: 13, color: '#A79A8A' }}>Nothing else queued.</div>
-                )}
-                {hiddenByEnergy > 0 && (
-                  <div style={{ padding: '8px 12px 4px 12px', fontSize: 12, color: '#A79A8A', fontStyle: 'italic' }}>
-                    {`${hiddenByEnergy} more hidden — energy’s low, keeping today light.`}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                  ))}
+                  {rest.length === 0 && (
+                    <div style={{ padding: '10px 12px', fontSize: 13, color: '#A79A8A' }}>Nothing else queued.</div>
+                  )}
+                  {hiddenByEnergy > 0 && (
+                    <div style={{ padding: '8px 12px 4px 12px', fontSize: 12, color: '#A79A8A', fontStyle: 'italic' }}>
+                      {`${hiddenByEnergy} more hidden — energy’s low, keeping today light.`}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* PILLARS */}
