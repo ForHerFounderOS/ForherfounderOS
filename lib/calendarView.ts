@@ -77,3 +77,23 @@ export function eventsOnDay(events: CalEvent[], day: DateTime): ViewCalEvent[] {
     .filter((e) => londonDayKey(e.startISO) === dayKey)
     .map((e) => ({ id: e.id, time: e.allDay ? 'All day' : londonTime(e.startISO), label: e.title, allDay: e.allDay }));
 }
+
+export type BoardMeetingInfo = { weekdayName: string; minutes: number | null; daysUntil: number };
+
+// Finds the next real "Board Meeting" event in the feed (matched by title,
+// case-insensitive) so the Sidebar can show its actual day and length
+// instead of a hardcoded guess. `now` should already be in London time.
+export function findBoardMeeting(events: CalEvent[], now: DateTime): BoardMeetingInfo | null {
+  const todayStart = now.startOf('day');
+  const next = events
+    .filter((e) => /board meeting/i.test(e.title))
+    .filter((e) => DateTime.fromISO(e.startISO, { zone: 'utc' }).setZone(ZONE) >= todayStart)
+    .sort((a, b) => (a.startISO < b.startISO ? -1 : 1))[0];
+  if (!next) return null;
+
+  const start = DateTime.fromISO(next.startISO, { zone: 'utc' }).setZone(ZONE);
+  const end = DateTime.fromISO(next.endISO, { zone: 'utc' }).setZone(ZONE);
+  const minutes = next.allDay ? null : Math.round(end.diff(start, 'minutes').minutes);
+  const daysUntil = Math.floor(start.startOf('day').diff(todayStart, 'days').days);
+  return { weekdayName: start.toFormat('cccc'), minutes, daysUntil };
+}
