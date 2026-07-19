@@ -41,6 +41,9 @@ export type ViewPillar = {
 
 export type ParkingItem = { id: string; text: string; dateAdded: string | null };
 
+export type PeriodTask = { id: string; label: string; done: boolean; deadlineLabel: string | null };
+export type PeriodStats = { total: number; completed: number; items: PeriodTask[] };
+
 function deadlineLabel(iso: string | null | undefined): { label: string | null; overdue: boolean } {
   if (!iso) return { label: null, overdue: false };
   const today = new Date();
@@ -181,14 +184,32 @@ export function buildViewModel(
     overdue,
   };
 
-  // Tasks with a deadline falling in the current calendar month — a real,
-  // computed "this month" measure rather than a made-up percentage.
-  const currentMonthKey = new Date().toISOString().slice(0, 7);
-  const monthTasks = taskRecs.filter((t) => t.fields.Deadline?.slice(0, 7) === currentMonthKey);
-  const monthly = {
-    total: monthTasks.length,
-    completed: monthTasks.filter((t) => t.fields.Done).length,
-  };
+  // Tasks whose Deadline falls within a given period — the real, computed
+  // basis for the Monthly/Quarterly progress meters, not a made-up number.
+  function periodStats(matchesPeriod: (deadline: string) => boolean): PeriodStats {
+    const items: PeriodTask[] = taskRecs
+      .filter((t) => t.fields.Deadline && matchesPeriod(t.fields.Deadline))
+      .map((t) => ({
+        id: t.id,
+        label: t.fields.Name,
+        done: !!t.fields.Done,
+        deadlineLabel: deadlineLabel(t.fields.Deadline).label,
+      }))
+      .sort((a, b) => {
+        if (a.done !== b.done) return a.done ? 1 : -1;
+        return 0;
+      });
+    return { total: items.length, completed: items.filter((i) => i.done).length, items };
+  }
 
-  return { pillars, openTasks, parkingLot, stats, monthly };
+  const now = new Date();
+  const currentMonthKey = now.toISOString().slice(0, 7);
+  const currentQuarter = Math.ceil((now.getMonth() + 1) / 3);
+  const monthly = periodStats((d) => d.slice(0, 7) === currentMonthKey);
+  const quarterly = periodStats((d) => {
+    const [y, m] = d.split('-');
+    return Number(y) === now.getFullYear() && Math.ceil(Number(m) / 3) === currentQuarter;
+  });
+
+  return { pillars, openTasks, parkingLot, stats, monthly, quarterly };
 }

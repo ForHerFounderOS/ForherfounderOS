@@ -50,7 +50,8 @@ export default function Page() {
   const openTasks = data?.openTasks || [];
   const parkingLot = data?.parkingLot || [];
   const stats = data?.stats || { total: 0, completed: 0, open: 0, overdue: 0 };
-  const monthly = data?.monthly || { total: 0, completed: 0 };
+  const monthly = data?.monthly || { total: 0, completed: 0, items: [] };
+  const quarterly = data?.quarterly || { total: 0, completed: 0, items: [] };
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#FAEEE4', fontFamily: 'var(--font-instrument-sans), system-ui, sans-serif', color: '#2B2118' }}>
@@ -60,6 +61,7 @@ export default function Page() {
           <Home
             pillars={pillars}
             openTasks={openTasks}
+            stats={stats}
             loading={loading}
             error={error}
             onToggleTask={toggleTaskDone}
@@ -68,7 +70,9 @@ export default function Page() {
         )}
         {screen === 'brief' && <DailyBriefing openTasks={openTasks} tasksLoading={loading} tasksError={error} />}
         {screen === 'calendar' && <CalendarIntelligence />}
-        {screen === 'progress' && <Progress pillars={pillars} stats={stats} board={board} monthly={monthly} />}
+        {screen === 'progress' && (
+          <Progress pillars={pillars} stats={stats} board={board} monthly={monthly} quarterly={quarterly} />
+        )}
         {screen === 'knowledge' && <Knowledge />}
         {screen === 'journal' && <Journal />}
         {screen === 'board' && (
