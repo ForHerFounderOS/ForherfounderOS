@@ -22,12 +22,11 @@ const badgeStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-type Tab = 'overall' | 'quarterly' | 'monthly' | 'weekly';
+type Tab = 'overall' | 'quarterly' | 'monthly';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overall', label: 'Overall' },
   { id: 'quarterly', label: 'Quarterly' },
   { id: 'monthly', label: 'Monthly' },
-  { id: 'weekly', label: 'Weekly' },
 ];
 
 function MeterCard({
@@ -236,6 +235,30 @@ export default function Progress({
               <div style={{ padding: '13px 0', fontSize: 13, color: '#A79A8A' }}>No active pillars yet.</div>
             )}
           </DetailCard>
+
+          <MeterCard
+            eyebrow="This week"
+            eyebrowColor="#A33757"
+            headline={filledOutcomes.length ? `${doneN} of ${filledOutcomes.length} outcomes · ${weekPct}%` : 'No outcomes set yet'}
+            pct={weekPct}
+            barFrom="#DC586D"
+            barTo="#A33757"
+            barBg="#F5E3D8"
+            footnote="Set at the Board Meeting. Tick them off there as the week moves."
+          />
+          <DetailCard title="This week's outcomes">
+            {filledOutcomes.length === 0 && (
+              <div style={{ padding: '13px 0', fontSize: 13, color: '#A79A8A' }}>No outcomes set yet — that&rsquo;s what Sunday&rsquo;s for.</div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: filledOutcomes.length ? 8 : 0 }}>
+              {filledOutcomes.map((o, i) => (
+                <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'baseline', fontSize: 13.5, lineHeight: 1.45, color: o.done ? '#7A6E60' : '#3A2F24' }}>
+                  <span style={{ color: o.done ? '#A33757' : '#C4B7A5', flexShrink: 0 }}>{o.done ? '✓' : '○'}</span>
+                  <span style={{ textDecoration: o.done ? 'line-through' : 'none' }}>{o.label}</span>
+                </div>
+              ))}
+            </div>
+          </DetailCard>
         </div>
       )}
 
@@ -279,34 +302,6 @@ export default function Progress({
               emptyText="Nothing due this month yet — plenty of runway."
               onSelect={setSelectedTask}
             />
-          </DetailCard>
-        </div>
-      )}
-
-      {tab === 'weekly' && (
-        <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <MeterCard
-            eyebrow="This week"
-            eyebrowColor="#A33757"
-            headline={filledOutcomes.length ? `${doneN} of ${filledOutcomes.length} outcomes · ${weekPct}%` : 'No outcomes set yet'}
-            pct={weekPct}
-            barFrom="#DC586D"
-            barTo="#A33757"
-            barBg="#F5E3D8"
-            footnote="Set at the Board Meeting. Tick them off there as the week moves."
-          />
-          <DetailCard title="This week's outcomes">
-            {filledOutcomes.length === 0 && (
-              <div style={{ padding: '13px 0', fontSize: 13, color: '#A79A8A' }}>No outcomes set yet — that&rsquo;s what Sunday&rsquo;s for.</div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: filledOutcomes.length ? 8 : 0 }}>
-              {filledOutcomes.map((o, i) => (
-                <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'baseline', fontSize: 13.5, lineHeight: 1.45, color: o.done ? '#7A6E60' : '#3A2F24' }}>
-                  <span style={{ color: o.done ? '#A33757' : '#C4B7A5', flexShrink: 0 }}>{o.done ? '✓' : '○'}</span>
-                  <span style={{ textDecoration: o.done ? 'line-through' : 'none' }}>{o.label}</span>
-                </div>
-              ))}
-            </div>
           </DetailCard>
         </div>
       )}
