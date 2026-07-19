@@ -153,7 +153,7 @@ export default function Progress({
   ];
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: '46px 44px 140px 44px' }} className="fcc-fade-up">
+    <div style={{ maxWidth: 1060, margin: '0 auto', padding: '46px 44px 140px 44px' }} className="fcc-fade-up">
       <h1 style={{ margin: 0, fontFamily: serif, fontWeight: 400, fontSize: 30 }}>Progress</h1>
       <p style={{ margin: '10px 0 0 0', fontSize: 14, color: '#7A6E60', maxWidth: 560, lineHeight: 1.55 }}>
         Movement over the season — no streaks, no points. Just what has actually advanced.
@@ -207,58 +207,64 @@ export default function Progress({
             </div>
           </div>
 
-          <MeterCard
-            eyebrow="Overall"
-            eyebrowColor="#4A5A3C"
-            headline={`${overallPct}% of the roadmap`}
-            pct={overallPct}
-            barFrom="#8CA57D"
-            barTo="#4A5A3C"
-            barBg="#E7EBDA"
-            footnote={`Measured against the full ${FORHER_ROADMAP_SIZE}-item ForHer workstream roadmap — the agreed scope, not a guess.`}
-          />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, alignItems: 'start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+              <MeterCard
+                eyebrow="Overall"
+                eyebrowColor="#4A5A3C"
+                headline={`${overallPct}% of the roadmap`}
+                pct={overallPct}
+                barFrom="#8CA57D"
+                barTo="#4A5A3C"
+                barBg="#E7EBDA"
+                footnote={`Measured against the full ${FORHER_ROADMAP_SIZE}-item ForHer workstream roadmap — the agreed scope, not a guess.`}
+              />
 
-          <DetailCard title="Pillar movement · live">
-            {activePillars.map((row) => (
-              <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '220px 1fr 60px', gap: 16, alignItems: 'center', padding: '13px 0', borderTop: '1px solid #F3EDE1' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: row.color }} />
-                  <span style={{ fontSize: 14, fontWeight: 500, color: '#3A2F24' }}>{row.name}</span>
-                </div>
-                <div style={{ height: 5, borderRadius: 99, background: '#EFE8DB', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', borderRadius: 99, background: row.color, width: `${row.pct}%` }} />
-                </div>
-                <div style={{ textAlign: 'right', fontSize: 13, color: '#4A5A3C', fontWeight: 600 }}>{row.pct}%</div>
-              </div>
-            ))}
-            {activePillars.length === 0 && (
-              <div style={{ padding: '13px 0', fontSize: 13, color: '#A79A8A' }}>No active pillars yet.</div>
-            )}
-          </DetailCard>
-
-          <MeterCard
-            eyebrow="This week"
-            eyebrowColor="#A33757"
-            headline={filledOutcomes.length ? `${doneN} of ${filledOutcomes.length} outcomes · ${weekPct}%` : 'No outcomes set yet'}
-            pct={weekPct}
-            barFrom="#DC586D"
-            barTo="#A33757"
-            barBg="#F5E3D8"
-            footnote="Set at the Board Meeting. Tick them off there as the week moves."
-          />
-          <DetailCard title="This week's outcomes">
-            {filledOutcomes.length === 0 && (
-              <div style={{ padding: '13px 0', fontSize: 13, color: '#A79A8A' }}>No outcomes set yet — that&rsquo;s what Sunday&rsquo;s for.</div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: filledOutcomes.length ? 8 : 0 }}>
-              {filledOutcomes.map((o, i) => (
-                <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'baseline', fontSize: 13.5, lineHeight: 1.45, color: o.done ? '#7A6E60' : '#3A2F24' }}>
-                  <span style={{ color: o.done ? '#A33757' : '#C4B7A5', flexShrink: 0 }}>{o.done ? '✓' : '○'}</span>
-                  <span style={{ textDecoration: o.done ? 'line-through' : 'none' }}>{o.label}</span>
-                </div>
-              ))}
+              <DetailCard title="Pillar movement · live">
+                {activePillars.map((row) => (
+                  <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '220px 1fr 60px', gap: 16, alignItems: 'center', padding: '13px 0', borderTop: '1px solid #F3EDE1' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: row.color }} />
+                      <span style={{ fontSize: 14, fontWeight: 500, color: '#3A2F24' }}>{row.name}</span>
+                    </div>
+                    <div style={{ height: 5, borderRadius: 99, background: '#EFE8DB', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', borderRadius: 99, background: row.color, width: `${row.pct}%` }} />
+                    </div>
+                    <div style={{ textAlign: 'right', fontSize: 13, color: '#4A5A3C', fontWeight: 600 }}>{row.pct}%</div>
+                  </div>
+                ))}
+                {activePillars.length === 0 && (
+                  <div style={{ padding: '13px 0', fontSize: 13, color: '#A79A8A' }}>No active pillars yet.</div>
+                )}
+              </DetailCard>
             </div>
-          </DetailCard>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'sticky', top: 24 }}>
+              <MeterCard
+                eyebrow="This week"
+                eyebrowColor="#A33757"
+                headline={filledOutcomes.length ? `${doneN} of ${filledOutcomes.length} outcomes · ${weekPct}%` : 'No outcomes set yet'}
+                pct={weekPct}
+                barFrom="#DC586D"
+                barTo="#A33757"
+                barBg="#F5E3D8"
+                footnote="Set at the Board Meeting. Tick them off there as the week moves."
+              />
+              <DetailCard title="This week's outcomes">
+                {filledOutcomes.length === 0 && (
+                  <div style={{ padding: '13px 0', fontSize: 13, color: '#A79A8A' }}>No outcomes set yet — that&rsquo;s what Sunday&rsquo;s for.</div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: filledOutcomes.length ? 8 : 0 }}>
+                  {filledOutcomes.map((o, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'baseline', fontSize: 13.5, lineHeight: 1.45, color: o.done ? '#7A6E60' : '#3A2F24' }}>
+                      <span style={{ color: o.done ? '#A33757' : '#C4B7A5', flexShrink: 0 }}>{o.done ? '✓' : '○'}</span>
+                      <span style={{ textDecoration: o.done ? 'line-through' : 'none' }}>{o.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </DetailCard>
+            </div>
+          </div>
         </div>
       )}
 
