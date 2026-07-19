@@ -82,8 +82,8 @@ export default function CalendarIntelligence() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, marginTop: 28, alignItems: 'start' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+      <div style={{ marginTop: 28 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12 }}>
           {(days || PLACEHOLDER_DAYS).map((day) => (
             <div
               key={day.name}
@@ -134,22 +134,25 @@ export default function CalendarIntelligence() {
           ))}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#A79A8A', paddingLeft: 4 }}>
+        <div
+          style={{
+            marginTop: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+            background: '#FFFDF8',
+            border: '1px solid #EAE2D6',
+            borderRadius: 14,
+            padding: '18px 22px',
+            boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05)',
+          }}
+        >
+          <div style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#A79A8A' }}>
             This week at a glance
           </div>
-          <div
-            style={{
-              background: '#FFFDF8',
-              border: '1px solid #EAE2D6',
-              borderRadius: 14,
-              padding: '18px 20px',
-              boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05)',
-              fontSize: 13.5,
-              lineHeight: 1.55,
-              color: '#3A2F24',
-            }}
-          >
+          <div style={{ fontSize: 13.5, lineHeight: 1.55, color: '#3A2F24' }}>
             {summary ? (
               <>
                 <strong style={{ fontWeight: 600, color: '#A33757' }}>
