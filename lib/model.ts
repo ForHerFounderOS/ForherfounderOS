@@ -107,7 +107,10 @@ export function buildViewModel(
       if (da && db) return da < db ? -1 : da > db ? 1 : 0;
       if (da) return -1;
       if (db) return 1;
-      return a.createdTime < b.createdTime ? -1 : 1;
+      // No deadline on either: the most recently created task wins, since
+      // that's the one most likely to reflect the latest decision — an old
+      // task with no deadline shouldn't keep outranking one just created.
+      return a.createdTime > b.createdTime ? -1 : 1;
     });
     return open[0];
   }
