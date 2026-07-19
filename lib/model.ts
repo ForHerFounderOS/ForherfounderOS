@@ -190,6 +190,19 @@ export function buildViewModel(
     };
   }
 
+  // First Move: the next task in whichever workstream carries the lowest
+  // Priority Order among active pillars — a real Airtable field the Board
+  // Meeting writes to on approval, not something living only in the
+  // browser. Nothing set anywhere yet means no priority has been chosen.
+  const activePillarIds = new Set(pillars.filter((p) => p.primary || p.active).map((p) => p.id));
+  const prioritizedWorkstreams = workstreamRecs
+    .filter((w) => typeof w.fields['Priority Order'] === 'number')
+    .filter((w) => (w.fields.Pillar || []).some((pId) => activePillarIds.has(pId)))
+    .sort((a, b) => (a.fields['Priority Order'] as number) - (b.fields['Priority Order'] as number));
+  const topWorkstream = prioritizedWorkstreams[0] || null;
+  const topTask = topWorkstream ? nextTaskByWorkstream.get(topWorkstream.id) : null;
+  const firstMove: ViewTask | null = topTask ? toViewTask(topTask) : null;
+
   const openTasks: ViewTask[] = taskRecs
     .filter((t) => !t.fields.Done)
     .map(toViewTask)
@@ -237,5 +250,5 @@ export function buildViewModel(
     return Number(y) === now.getFullYear() && Math.ceil(Number(m) / 3) === currentQuarter;
   });
 
-  return { pillars, openTasks, parkingLot, stats, monthly, quarterly };
+  return { pillars, openTasks, parkingLot, stats, monthly, quarterly, firstMove };
 }

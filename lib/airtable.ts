@@ -57,6 +57,7 @@ export type WorkstreamFields = {
   Progress?: number; // 0..1
   Tasks?: string[];
   Description?: string;
+  'Priority Order'?: number;
 };
 export type TaskFields = {
   Name: string;
@@ -107,10 +108,46 @@ export function updateTaskDone(id: string, done: boolean) {
   });
 }
 
+export function createTask(workstreamId: string, name: string, deadline?: string | null) {
+  const fields: Record<string, unknown> = { Name: name, Workstream: [workstreamId] };
+  if (deadline) fields.Deadline = deadline;
+  return airtableFetch(`/${encodeURIComponent(TABLES.tasks)}`, {
+    method: 'POST',
+    body: JSON.stringify({ fields }),
+  }) as Promise<AirtableRecord<TaskFields>>;
+}
+
 export function updatePillarActive(id: string, active: boolean) {
   return airtableFetch(`/${encodeURIComponent(TABLES.pillars)}/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ fields: { Active: active } }),
+  });
+}
+
+// The Board Meeting's "one priority" writes here — Priority Order was already
+// on Workstreams but unused anywhere in the app. Setting it below the current
+// lowest value makes this workstream unambiguously first, without needing to
+// renumber every other workstream.
+export async function setTopPriorityWorkstream(workstreamId: string) {
+  const workstreams = await getWorkstreams();
+  const currentMin = workstreams.reduce((min, w) => {
+    const order = w.fields['Priority Order'];
+    return typeof order === 'number' && order < min ? order : min;
+  }, 1);
+  const target = workstreams.some((w) => w.id === workstreamId && w.fields['Priority Order'] === currentMin)
+    ? currentMin
+    : currentMin - 1;
+  return airtableFetch(`/${encodeURIComponent(TABLES.workstreams)}/${workstreamId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ fields: { 'Priority Order': target } }),
+  });
+}
+
+export function createKnowledgeEntry(text: string, type: string) {
+  const today = new Date().toISOString().slice(0, 10);
+  return airtableFetch(`/${encodeURIComponent(TABLES.knowledge)}`, {
+    method: 'POST',
+    body: JSON.stringify({ fields: { Text: text, Type: type, Date: today } }),
   });
 }
 

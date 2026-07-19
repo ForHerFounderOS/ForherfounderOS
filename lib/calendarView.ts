@@ -13,8 +13,20 @@ function minutesSinceMidnight(iso: string): number {
   const dt = DateTime.fromISO(iso, { zone: 'utc' }).setZone(ZONE);
   return dt.hour * 60 + dt.minute;
 }
+function durationMinutesOf(startISO: string, endISO: string): number {
+  const start = DateTime.fromISO(startISO, { zone: 'utc' });
+  const end = DateTime.fromISO(endISO, { zone: 'utc' });
+  return Math.max(0, Math.round(end.diff(start, 'minutes').minutes));
+}
 
-export type ViewCalEvent = { id: string; time: string; label: string; allDay: boolean; protected?: boolean };
+export type ViewCalEvent = {
+  id: string;
+  time: string;
+  label: string;
+  allDay: boolean;
+  protected?: boolean;
+  durationMinutes: number | null;
+};
 export type ViewCalDay = { name: string; dateNum: string; isToday: boolean; events: ViewCalEvent[] };
 
 type ProtectedBlock = { weekday: number; startHour: number; endHour: number; label: string };
@@ -50,6 +62,7 @@ export function groupByWeek(events: CalEvent[], weekStart: DateTime): ViewCalDay
         time: e.allDay ? 'All day' : londonTime(e.startISO),
         label: e.title,
         allDay: e.allDay,
+        durationMinutes: e.allDay ? null : durationMinutesOf(e.startISO, e.endISO),
         sortMinutes: e.allDay ? -1 : minutesSinceMidnight(e.startISO),
       }));
 
@@ -61,6 +74,7 @@ export function groupByWeek(events: CalEvent[], weekStart: DateTime): ViewCalDay
         label: block.label,
         allDay: false,
         protected: true,
+        durationMinutes: (block.endHour - block.startHour) * 60,
         sortMinutes: block.startHour * 60,
       });
     }
@@ -71,6 +85,7 @@ export function groupByWeek(events: CalEvent[], weekStart: DateTime): ViewCalDay
       time: e.time,
       label: e.label,
       allDay: e.allDay,
+      durationMinutes: e.durationMinutes,
       protected: e.protected,
     }));
 
@@ -99,7 +114,13 @@ export function eventsOnDay(events: CalEvent[], day: DateTime): ViewCalEvent[] {
   const dayKey = day.toFormat('yyyy-MM-dd');
   return events
     .filter((e) => londonDayKey(e.startISO) === dayKey)
-    .map((e) => ({ id: e.id, time: e.allDay ? 'All day' : londonTime(e.startISO), label: e.title, allDay: e.allDay }));
+    .map((e) => ({
+      id: e.id,
+      time: e.allDay ? 'All day' : londonTime(e.startISO),
+      label: e.title,
+      allDay: e.allDay,
+      durationMinutes: e.allDay ? null : durationMinutesOf(e.startISO, e.endISO),
+    }));
 }
 
 export type BoardMeetingInfo = { weekdayName: string; minutes: number | null; daysUntil: number };
