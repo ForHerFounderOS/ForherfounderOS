@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { serif, sans } from '@/lib/theme';
 import type { Screen } from './types';
 
@@ -12,9 +13,43 @@ const NAV: { key: Screen; label: string }[] = [
   { key: 'journal', label: 'Journal' },
 ];
 
+type BoardMeetingInfo = { weekdayName: string; minutes: number | null; daysUntil: number };
+
+function nextOccurrenceLabel(daysUntil: number, weekdayName: string): string {
+  if (daysUntil === 0) return 'today';
+  if (daysUntil === 1) return 'tomorrow';
+  if (daysUntil <= 6) return `this ${weekdayName}`;
+  return `next ${weekdayName}`;
+}
+
+function boardMeetingLine(info: BoardMeetingInfo | null | undefined): string {
+  if (info === undefined) return 'Reading your calendar…';
+  if (!info) return 'Add a recurring "Board Meeting" event to sync this.';
+  const next = nextOccurrenceLabel(info.daysUntil, info.weekdayName);
+  return info.minutes
+    ? `${info.weekdayName}s, ${info.minutes} min. Next: ${next}.`
+    : `${info.weekdayName}s. Next: ${next}.`;
+}
+
 export default function Sidebar({ screen, setScreen }: { screen: Screen; setScreen: (s: Screen) => void }) {
   const boardActive = screen === 'board';
   const settingsActive = screen === 'settings';
+  const [boardMeeting, setBoardMeeting] = useState<BoardMeetingInfo | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/calendar/board-meeting')
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled) setBoardMeeting(json.info ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setBoardMeeting(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <nav
@@ -120,7 +155,7 @@ export default function Sidebar({ screen, setScreen }: { screen: Screen; setScre
           Weekly Board Meeting
         </button>
         <div style={{ padding: '6px 12px 0 12px', fontSize: 11.5, lineHeight: 1.5, color: '#BE8398' }}>
-          Sundays, 45 min. Next: this Sunday.
+          {boardMeetingLine(boardMeeting)}
         </div>
       </div>
 

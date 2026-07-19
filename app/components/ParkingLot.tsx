@@ -32,7 +32,11 @@ function getSpeechRecognitionCtor(): SpeechRecognitionConstructor | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
-type RambleMode = 'idle' | 'recording' | 'organizing' | 'reviewing';
+// Free, browser-only transcription (Web Speech API) plus a quick edit before
+// committing — no server round-trip, no API key, no attempt to auto-split a
+// ramble into multiple entries. Straight transcript in, one parking lot
+// entry out, with a chance to fix whatever the recognizer got wrong.
+type RambleMode = 'idle' | 'recording' | 'reviewing';
 
 export default function ParkingLot({
   items,
@@ -49,7 +53,6 @@ export default function ParkingLot({
   const [rambleMode, setRambleMode] = useState<RambleMode>('idle');
   const [transcript, setTranscript] = useState('');
   const [interim, setInterim] = useState('');
-  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [rambleError, setRambleError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const speechSupported = !!getSpeechRecognitionCtor();
@@ -65,27 +68,7 @@ export default function ParkingLot({
     setRambleMode('idle');
     setTranscript('');
     setInterim('');
-    setSuggestions([]);
     setRambleError(null);
-  };
-
-  const organize = async (rawTranscript: string) => {
-    setRambleMode('organizing');
-    setRambleError(null);
-    try {
-      const res = await fetch('/api/parking-lot/organize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: rawTranscript }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to organize');
-      setSuggestions(json.entries || []);
-      setRambleMode('reviewing');
-    } catch (err) {
-      setRambleError(err instanceof Error ? err.message : 'Failed to organize');
-      setRambleMode('reviewing');
-    }
   };
 
   const startRamble = () => {
@@ -129,17 +112,18 @@ export default function ParkingLot({
   const stopRamble = () => {
     recognitionRef.current?.stop();
     const full = (transcript + interim).trim();
-    if (full) organize(full);
-    else resetRamble();
+    if (full) {
+      setTranscript(full);
+      setInterim('');
+      setRambleMode('reviewing');
+    } else {
+      resetRamble();
+    }
   };
 
-  const addSelectedSuggestions = () => {
-    for (const s of suggestions) onAdd(s);
+  const addRamble = () => {
+    if (transcript.trim()) onAdd(transcript.trim());
     resetRamble();
-  };
-
-  const removeSuggestion = (i: number) => {
-    setSuggestions((prev) => prev.filter((_, idx) => idx !== i));
   };
 
   return (
@@ -173,7 +157,7 @@ export default function ParkingLot({
             {rambleMode === 'idle' && (
               <button
                 onClick={startRamble}
-                title={speechSupported ? 'Ramble a stream of thoughts' : 'Voice capture needs Chrome or Edge'}
+                title={speechSupported ? 'Ramble a stray thought out loud' : 'Voice capture needs Chrome or Edge'}
                 disabled={!speechSupported}
                 style={{
                   border: '1px solid rgba(255, 187, 148, 0.35)',
@@ -294,7 +278,7 @@ export default function ParkingLot({
                     borderRadius: 8,
                   }}
                 >
-                  Stop &amp; organize
+                  Stop
                 </button>
                 <button
                   onClick={resetRamble}
@@ -315,93 +299,46 @@ export default function ParkingLot({
             </div>
           )}
 
-          {rambleMode === 'organizing' && (
-            <div style={{ fontSize: 13, color: '#F3DCE3', padding: '14px 2px' }}>Sorting that into entries…</div>
-          )}
-
           {rambleMode === 'reviewing' && (
             <div>
-              {rambleError && (
-                <div style={{ fontSize: 12, color: '#F0A8A8', lineHeight: 1.5, marginBottom: 8 }}>
-                  {`${rambleError} Your words are still here — add the whole thing as one entry, or cancel.`}
-                </div>
-              )}
-              {suggestions.length > 0 && (
-                <div style={{ fontSize: 11, color: '#A86A80', marginBottom: 6 }}>
-                  {`Sorted into ${suggestions.length} entr${suggestions.length === 1 ? 'y' : 'ies'} — remove any that don’t belong:`}
-                </div>
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
-                {suggestions.map((s, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      gap: 10,
-                      alignItems: 'baseline',
-                      background: 'rgba(255, 187, 148, 0.08)',
-                      border: '1px solid rgba(255, 187, 148, 0.18)',
-                      borderRadius: 8,
-                      padding: '8px 10px',
-                      fontSize: 12.5,
-                      color: '#F3DCE3',
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    <span>{s}</span>
-                    <button
-                      onClick={() => removeSuggestion(i)}
-                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#A86A80', fontSize: 11, padding: 0, flexShrink: 0 }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <div style={{ fontSize: 11, color: '#A86A80', marginBottom: 6 }}>Fix anything the mic misheard, then park it:</div>
+              <textarea
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                rows={4}
+                style={{
+                  width: '100%',
+                  resize: 'vertical',
+                  fontFamily: sans,
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  color: '#FCEDE2',
+                  background: 'rgba(255, 187, 148, 0.08)',
+                  border: '1px solid rgba(255, 187, 148, 0.25)',
+                  borderRadius: 9,
+                  padding: '9px 12px',
+                }}
+              />
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                {suggestions.length > 0 ? (
-                  <button
-                    onClick={addSelectedSuggestions}
-                    style={{
-                      flex: 1,
-                      border: 'none',
-                      cursor: 'pointer',
-                      background: '#FB9590',
-                      color: '#4C1D3D',
-                      fontFamily: sans,
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      padding: '9px 12px',
-                      borderRadius: 8,
-                    }}
-                  >
-                    {`Add ${suggestions.length} ${suggestions.length === 1 ? 'entry' : 'entries'}`}
-                  </button>
-                ) : (
-                  transcript.trim() && (
-                    <button
-                      onClick={() => {
-                        onAdd(transcript.trim());
-                        resetRamble();
-                      }}
-                      style={{
-                        flex: 1,
-                        border: 'none',
-                        cursor: 'pointer',
-                        background: '#FB9590',
-                        color: '#4C1D3D',
-                        fontFamily: sans,
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        padding: '9px 12px',
-                        borderRadius: 8,
-                      }}
-                    >
-                      Add as one entry
-                    </button>
-                  )
-                )}
+                <button
+                  onClick={addRamble}
+                  disabled={!transcript.trim()}
+                  style={{
+                    flex: 1,
+                    border: 'none',
+                    cursor: transcript.trim() ? 'pointer' : 'not-allowed',
+                    background: '#FB9590',
+                    color: '#4C1D3D',
+                    fontFamily: sans,
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    padding: '9px 12px',
+                    borderRadius: 8,
+                    opacity: transcript.trim() ? 1 : 0.6,
+                  }}
+                >
+                  Park it
+                </button>
                 <button
                   onClick={resetRamble}
                   style={{
@@ -415,7 +352,7 @@ export default function ParkingLot({
                     borderRadius: 8,
                   }}
                 >
-                  Cancel
+                  Discard
                 </button>
               </div>
             </div>
