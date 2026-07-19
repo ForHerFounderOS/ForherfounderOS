@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { serif, sans } from '@/lib/theme';
 import type { ViewPillar, ViewTask } from '@/lib/model';
+import type { BoardState } from './BoardMeeting';
 
 const GREETING_NAME = '';
 
@@ -26,25 +27,88 @@ const badgeStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
+type EnergyLevel = 'low' | 'medium' | 'high';
+type EnergyEntry = { date: string; level: EnergyLevel };
+
+const ENERGY_STORAGE_KEY = 'fcc-energy-log';
+const ENERGY_HISTORY_DAYS = 14;
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function loadEnergyLog(): EnergyEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(ENERGY_STORAGE_KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveEnergyLog(log: EnergyEntry[]) {
+  try {
+    localStorage.setItem(ENERGY_STORAGE_KEY, JSON.stringify(log.slice(-ENERGY_HISTORY_DAYS)));
+  } catch {}
+}
+
+// How many consecutive days, ending today, were logged "low" — used to scale
+// down how much the dashboard shows rather than just reacting to one bad day.
+function lowStreakEndingToday(log: EnergyEntry[]): number {
+  const byDate = new Map(log.map((e) => [e.date, e.level]));
+  let streak = 0;
+  const cursor = new Date();
+  for (;;) {
+    if (byDate.get(dateKey(cursor)) !== 'low') break;
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
 export default function Home({
   pillars,
   openTasks,
   loading,
   error,
   onToggleTask,
+  board,
 }: {
   pillars: ViewPillar[];
   openTasks: ViewTask[];
   loading: boolean;
   error: string | null;
   onToggleTask: (id: string) => void;
+  board: BoardState;
 }) {
   const [restOpen, setRestOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [energyLog, setEnergyLog] = useState<EnergyEntry[]>([]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEnergyLog(loadEnergyLog());
+  }, []);
+
+  const today = dateKey(new Date());
+  const todayEnergy = energyLog.find((e) => e.date === today)?.level;
+  const logEnergy = (level: EnergyLevel) => {
+    const next = [...energyLog.filter((e) => e.date !== today), { date: today, level }].sort((a, b) =>
+      a.date < b.date ? -1 : 1
+    );
+    setEnergyLog(next);
+    saveEnergyLog(next);
+  };
+  const lowStreak = todayEnergy === 'low' ? lowStreakEndingToday(energyLog) : 0;
+  // Two-plus low days running keeps only the single most pressing item;
+  // one low day trims to a short list. Otherwise, show everything as usual.
+  const taskCap = lowStreak >= 2 ? 1 : lowStreak === 1 ? 3 : Infinity;
 
   const activePillars = pillars.filter((p) => p.primary || p.active);
-  const firstMove = openTasks[0];
-  const rest = openTasks.slice(1);
+  const rest = openTasks;
+  const visibleRest = Number.isFinite(taskCap) ? rest.slice(0, taskCap) : rest;
+  const hiddenByEnergy = rest.length - visibleRest.length;
   const allDone = !loading && openTasks.length === 0;
 
   return (
@@ -125,6 +189,46 @@ export default function Home({
         <section style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'sticky', top: 30 }}>
           <h2 style={{ margin: '0 0 2px 4px', fontFamily: serif, fontWeight: 500, fontSize: 21, color: '#2B2118' }}>Today</h2>
 
+          <div style={{ background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, padding: '14px 18px', boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#A79A8A' }}>
+                Energy check
+              </span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['low', 'medium', 'high'] as const).map((level) => (
+                  <button
+                    key={level}
+                    onClick={() => logEnergy(level)}
+                    style={{
+                      border: `1px solid ${todayEnergy === level ? '#A33757' : '#DDD2C1'}`,
+                      background: todayEnergy === level ? '#FBE4DE' : 'transparent',
+                      color: todayEnergy === level ? '#A33757' : '#7A6E60',
+                      fontFamily: sans,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: '5px 12px',
+                      borderRadius: 99,
+                      cursor: 'pointer',
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {level}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {lowStreak >= 2 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#A24E2E', lineHeight: 1.5 }}>
+                {`Energy’s been low ${lowStreak} days running — keeping today’s list light.`}
+              </div>
+            )}
+            {lowStreak === 1 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#A79A8A', lineHeight: 1.5 }}>
+                Low energy today — showing fewer suggestions.
+              </div>
+            )}
+          </div>
+
           {allDone && (
             <div style={{ background: '#EEF0E6', border: '1px solid #CBD3B8', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05)' }}>
               <div style={{ fontFamily: serif, fontSize: 17, color: '#4A5A3C' }}>That&rsquo;s everything for today.</div>
@@ -140,7 +244,7 @@ export default function Home({
             </div>
           )}
 
-          {firstMove && (
+          {board.planPriority ? (
             <div
               style={{
                 background: 'linear-gradient(150deg, #A33757, #852E4E)',
@@ -150,32 +254,18 @@ export default function Home({
                 boxShadow: '0 2px 4px rgba(87, 38, 63, 0.2), 0 14px 32px rgba(87, 38, 63, 0.28)',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#F9CBBE' }}>First move</div>
-                {firstMove.deadlineLabel && <div style={{ fontSize: 11.5, color: '#F6BBAF' }}>{firstMove.deadlineLabel}</div>}
+              <div style={{ fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#F9CBBE' }}>First move</div>
+              <div style={{ marginTop: 10, fontFamily: serif, fontSize: 18.5, lineHeight: 1.4, fontWeight: 400 }}>
+                {board.planPriority}
               </div>
-              <div style={{ marginTop: 10, fontFamily: serif, fontSize: 18.5, lineHeight: 1.4, fontWeight: 400 }}>{firstMove.label}</div>
-              <div style={{ marginTop: 6, fontSize: 12.5, color: '#F6BBAF' }}>
-                {firstMove.pillarName}
-                {firstMove.workstreamName ? ` · ${firstMove.workstreamName}` : ''}
+              <div style={{ marginTop: 6, fontSize: 12.5, color: '#F6BBAF' }}>Set at Sunday&rsquo;s Board Meeting.</div>
+            </div>
+          ) : (
+            <div style={{ background: '#F1EBE0', border: '1px solid #DDD2C1', borderRadius: 14, padding: '20px 22px' }}>
+              <div style={{ fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#A79A8A' }}>First move</div>
+              <div style={{ marginTop: 10, fontFamily: serif, fontSize: 16.5, lineHeight: 1.4, fontWeight: 400, color: '#7A6E60' }}>
+                No priority set yet — runs at Sunday&rsquo;s Board Meeting.
               </div>
-              <button
-                onClick={() => onToggleTask(firstMove.id)}
-                style={{
-                  marginTop: 16,
-                  border: '1px solid rgba(246, 234, 241, 0.4)',
-                  background: 'rgba(246, 234, 241, 0.1)',
-                  color: '#FFF3EC',
-                  fontFamily: sans,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                }}
-              >
-                Mark done
-              </button>
             </div>
           )}
 
@@ -205,7 +295,7 @@ export default function Home({
             </button>
             {restOpen && (
               <div style={{ borderTop: '1px solid #F0E9DD', padding: '6px 8px 10px 8px', display: 'flex', flexDirection: 'column' }}>
-                {rest.map((task) => (
+                {visibleRest.map((task) => (
                   <div key={task.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 9 }}>
                     <button
                       onClick={() => onToggleTask(task.id)}
@@ -241,6 +331,11 @@ export default function Home({
                 ))}
                 {rest.length === 0 && (
                   <div style={{ padding: '10px 12px', fontSize: 13, color: '#A79A8A' }}>Nothing else queued.</div>
+                )}
+                {hiddenByEnergy > 0 && (
+                  <div style={{ padding: '8px 12px 4px 12px', fontSize: 12, color: '#A79A8A', fontStyle: 'italic' }}>
+                    {`${hiddenByEnergy} more hidden — energy’s low, keeping today light.`}
+                  </div>
                 )}
               </div>
             )}

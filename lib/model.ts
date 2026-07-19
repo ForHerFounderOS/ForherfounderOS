@@ -181,5 +181,14 @@ export function buildViewModel(
     overdue,
   };
 
-  return { pillars, openTasks, parkingLot, stats };
+  // Tasks with a deadline falling in the current calendar month — a real,
+  // computed "this month" measure rather than a made-up percentage.
+  const currentMonthKey = new Date().toISOString().slice(0, 7);
+  const monthTasks = taskRecs.filter((t) => t.fields.Deadline?.slice(0, 7) === currentMonthKey);
+  const monthly = {
+    total: monthTasks.length,
+    completed: monthTasks.filter((t) => t.fields.Done).length,
+  };
+
+  return { pillars, openTasks, parkingLot, stats, monthly };
 }

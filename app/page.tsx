@@ -50,17 +50,25 @@ export default function Page() {
   const openTasks = data?.openTasks || [];
   const parkingLot = data?.parkingLot || [];
   const stats = data?.stats || { total: 0, completed: 0, open: 0, overdue: 0 };
+  const monthly = data?.monthly || { total: 0, completed: 0 };
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#FAEEE4', fontFamily: 'var(--font-instrument-sans), system-ui, sans-serif', color: '#2B2118' }}>
       <Sidebar screen={screen} setScreen={setScreen} />
       <main style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
         {screen === 'home' && (
-          <Home pillars={pillars} openTasks={openTasks} loading={loading} error={error} onToggleTask={toggleTaskDone} />
+          <Home
+            pillars={pillars}
+            openTasks={openTasks}
+            loading={loading}
+            error={error}
+            onToggleTask={toggleTaskDone}
+            board={board}
+          />
         )}
         {screen === 'brief' && <DailyBriefing openTasks={openTasks} tasksLoading={loading} tasksError={error} />}
         {screen === 'calendar' && <CalendarIntelligence />}
-        {screen === 'progress' && <Progress pillars={pillars} stats={stats} board={board} />}
+        {screen === 'progress' && <Progress pillars={pillars} stats={stats} board={board} monthly={monthly} />}
         {screen === 'knowledge' && <Knowledge />}
         {screen === 'journal' && <Journal />}
         {screen === 'board' && (

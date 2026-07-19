@@ -4,19 +4,32 @@ import { serif } from '@/lib/theme';
 import type { ViewPillar } from '@/lib/model';
 import type { BoardState } from './BoardMeeting';
 
+// The agreed scope of the ForHer roadmap — fixed at 24 workstreams regardless
+// of how many happen to be in Airtable right now, so Overall tracks progress
+// against the original commitment rather than whatever's currently listed.
+const FORHER_ROADMAP_SIZE = 24;
+
 export default function Progress({
   pillars,
   stats,
   board,
+  monthly,
 }: {
   pillars: ViewPillar[];
   stats: { total: number; completed: number; open: number; overdue: number };
   board: BoardState;
+  monthly: { total: number; completed: number };
 }) {
   const activePillars = pillars.filter((p) => p.primary || p.active);
   const filledOutcomes = board.outcomes.map((o, i) => ({ label: o, done: !!board.outcomesDone[i] })).filter((o) => o.label.trim());
   const doneN = filledOutcomes.filter((o) => o.done).length;
   const weekPct = filledOutcomes.length ? Math.round((doneN / filledOutcomes.length) * 100) : 0;
+
+  const monthPct = monthly.total ? Math.round((monthly.completed / monthly.total) * 100) : 0;
+
+  const forHerPillar = pillars.find((p) => p.primary);
+  const roadmapSum = (forHerPillar?.workstreams || []).reduce((sum, w) => sum + w.pct, 0);
+  const overallPct = Math.round(roadmapSum / FORHER_ROADMAP_SIZE);
 
   const statBlocks = [
     { num: stats.total, label: 'Total tasks', color: '#F1E9DE' },
@@ -26,53 +39,54 @@ export default function Progress({
   ];
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: '46px 44px 140px 44px' }} className="fcc-fade-up">
+    <div style={{ maxWidth: 1040, margin: '0 auto', padding: '46px 44px 140px 44px' }} className="fcc-fade-up">
       <h1 style={{ margin: 0, fontFamily: serif, fontWeight: 400, fontSize: 30 }}>Progress</h1>
       <p style={{ margin: '10px 0 0 0', fontSize: 14, color: '#7A6E60', maxWidth: 560, lineHeight: 1.55 }}>
         Movement over the season — no streaks, no points. Just what has actually advanced.
       </p>
 
-      <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16, alignItems: 'stretch' }}>
-        <div
-          style={{
-            background: 'linear-gradient(160deg, #5E2246, #4C1D3D)',
-            color: '#F1E9DE',
-            borderRadius: 16,
-            padding: '26px 30px',
-            boxShadow: '0 2px 4px rgba(43, 33, 24, 0.08), 0 14px 36px rgba(43, 33, 24, 0.16)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 10 }}>
-            <div>
-              <div style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#CE8AA0' }}>Season</div>
-              <div style={{ fontFamily: serif, fontSize: 22, marginTop: 4 }}>Foundation &amp; Validation</div>
-            </div>
-          </div>
-          <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid rgba(244, 237, 227, 0.12)', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-            {statBlocks.map((s) => (
-              <div key={s.label}>
-                <div style={{ fontFamily: serif, fontSize: 24, color: s.color }}>{s.num}</div>
-                <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#CE8AA0', marginTop: 2 }}>
-                  {s.label}
-                </div>
-              </div>
-            ))}
+      <div
+        style={{
+          marginTop: 28,
+          background: 'linear-gradient(160deg, #5E2246, #4C1D3D)',
+          color: '#F1E9DE',
+          borderRadius: 16,
+          padding: '26px 30px',
+          boxShadow: '0 2px 4px rgba(43, 33, 24, 0.08), 0 14px 36px rgba(43, 33, 24, 0.16)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#CE8AA0' }}>Season</div>
+            <div style={{ fontFamily: serif, fontSize: 22, marginTop: 4 }}>Foundation &amp; Validation</div>
           </div>
         </div>
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid rgba(244, 237, 227, 0.12)', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          {statBlocks.map((s) => (
+            <div key={s.label}>
+              <div style={{ fontFamily: serif, fontSize: 24, color: s.color }}>{s.num}</div>
+              <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#CE8AA0', marginTop: 2 }}>
+                {s.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
+      <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, alignItems: 'stretch' }}>
         <div
           style={{
             background: '#FFFDF8',
             border: '1px solid #EAE2D6',
             borderRadius: 16,
-            padding: '24px 26px',
+            padding: '22px 24px',
             boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05), 0 10px 26px rgba(43, 33, 24, 0.07)',
             display: 'flex',
             flexDirection: 'column',
           }}
         >
           <div style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#A33757' }}>This week</div>
-          <div style={{ fontFamily: serif, fontSize: 22, marginTop: 6, color: '#2B2118' }}>
+          <div style={{ fontFamily: serif, fontSize: 20, marginTop: 6, color: '#2B2118' }}>
             {filledOutcomes.length ? `${doneN} of ${filledOutcomes.length} outcomes · ${weekPct}%` : 'No outcomes set yet'}
           </div>
           <div style={{ marginTop: 14, height: 6, borderRadius: 99, background: '#F5E3D8', overflow: 'hidden' }}>
@@ -88,6 +102,50 @@ export default function Progress({
           </div>
           <div style={{ marginTop: 'auto', paddingTop: 12, fontSize: 11.5, color: '#A79A8A', lineHeight: 1.5 }}>
             Set at the Board Meeting. Tick them off there as the week moves.
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: '#FFFDF8',
+            border: '1px solid #EAE2D6',
+            borderRadius: 16,
+            padding: '22px 24px',
+            boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05), 0 10px 26px rgba(43, 33, 24, 0.07)',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#8A4F79' }}>This month</div>
+          <div style={{ fontFamily: serif, fontSize: 20, marginTop: 6, color: '#2B2118' }}>
+            {monthly.total ? `${monthly.completed} of ${monthly.total} due · ${monthPct}%` : 'Nothing due this month'}
+          </div>
+          <div style={{ marginTop: 14, height: 6, borderRadius: 99, background: '#EEE1F0', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${monthPct}%`, borderRadius: 99, background: 'linear-gradient(90deg, #C285B0, #8A4F79)' }} />
+          </div>
+          <div style={{ marginTop: 'auto', paddingTop: 12, fontSize: 11.5, color: '#A79A8A', lineHeight: 1.5 }}>
+            Tasks with a deadline this month, from Airtable — completed vs. total.
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: '#FFFDF8',
+            border: '1px solid #EAE2D6',
+            borderRadius: 16,
+            padding: '22px 24px',
+            boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05), 0 10px 26px rgba(43, 33, 24, 0.07)',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#4A5A3C' }}>Overall</div>
+          <div style={{ fontFamily: serif, fontSize: 20, marginTop: 6, color: '#2B2118' }}>{overallPct}% of the roadmap</div>
+          <div style={{ marginTop: 14, height: 6, borderRadius: 99, background: '#E7EBDA', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${overallPct}%`, borderRadius: 99, background: 'linear-gradient(90deg, #8CA57D, #4A5A3C)' }} />
+          </div>
+          <div style={{ marginTop: 'auto', paddingTop: 12, fontSize: 11.5, color: '#A79A8A', lineHeight: 1.5 }}>
+            Measured against the full {FORHER_ROADMAP_SIZE}-item ForHer workstream roadmap — the agreed scope, not a guess.
           </div>
         </div>
       </div>
