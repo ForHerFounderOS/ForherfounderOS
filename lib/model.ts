@@ -9,11 +9,19 @@ import type {
 const COLORS = ['#A33757', '#9C7222', '#8A4F79', '#4E7B4C', '#DC586D', '#4C6B8A', '#6B7B4E', '#7A4E8A'];
 const COLORS_SOFT = ['#B06A93', '#C29D50', '#B37EA4', '#7FAA7C', '#E98A97', '#8CA6BE', '#A8B98C', '#A98CB9'];
 
+// The same shape backs both the day-to-day open task list and the
+// Monthly/Quarterly breakdowns — a task means the same thing everywhere,
+// so clicking into one always shows the same real context: what it's part
+// of, whether it's actually the thing holding that workstream up, and when
+// it's really due.
 export type ViewTask = {
   id: string;
   label: string;
   pillarName: string;
   workstreamName: string;
+  workstreamDescription: string | null;
+  isNext: boolean;
+  blockedByLabel: string | null;
   done: boolean;
   deadline: string | null; // ISO
   deadlineLabel: string | null;
@@ -23,6 +31,7 @@ export type ViewTask = {
 export type ViewWorkstream = {
   id: string;
   name: string;
+  description: string | null;
   pct: number; // 0..100
   next: string;
   deadlineLabel: string | null;
@@ -41,7 +50,7 @@ export type ViewPillar = {
 
 export type ParkingItem = { id: string; text: string; dateAdded: string | null };
 
-export type PeriodTask = { id: string; label: string; done: boolean; deadlineLabel: string | null };
+export type PeriodTask = ViewTask;
 export type PeriodStats = { total: number; completed: number; items: PeriodTask[] };
 
 function deadlineLabel(iso: string | null | undefined): { label: string | null; overdue: boolean } {
@@ -103,6 +112,30 @@ export function buildViewModel(
     return open[0];
   }
 
+  // Computed once so every view (today's list, First Move, the Monthly and
+  // Quarterly breakdowns) agrees on what's actually next in each workstream —
+  // and therefore on what a given task is, or isn't, blocking.
+  const nextTaskByWorkstream = new Map<string, AirtableRecord<TaskFields> | null>();
+  for (const w of workstreamRecs) {
+    nextTaskByWorkstream.set(w.id, pickNext(tasksByWorkstream.get(w.id) || []));
+  }
+
+  function taskContext(t: AirtableRecord<TaskFields>) {
+    const wsId = (t.fields.Workstream || [])[0];
+    const ws = wsId ? workstreamById.get(wsId) : undefined;
+    const pId = ws ? (ws.fields.Pillar || [])[0] : undefined;
+    const pillar = pId ? pillarById.get(pId) : undefined;
+    const next = wsId ? nextTaskByWorkstream.get(wsId) : undefined;
+    const isNext = !!next && next.id === t.id;
+    return {
+      pillarName: pillar?.fields.Name || 'Unassigned',
+      workstreamName: ws?.fields.Name || '',
+      workstreamDescription: ws?.fields.Description || null,
+      isNext,
+      blockedByLabel: !isNext && next ? next.fields.Name : null,
+    };
+  }
+
   const hasPrimaryField = pillarRecs.some((p) => typeof p.fields.Primary === 'boolean');
 
   const pillars: ViewPillar[] = pillarRecs.map((p, i) => {
@@ -115,11 +148,12 @@ export function buildViewModel(
           : tasks.length
           ? Math.round((tasks.filter((t) => t.fields.Done).length / tasks.length) * 100)
           : 0;
-      const next = pickNext(tasks);
+      const next = nextTaskByWorkstream.get(w.id) || null;
       const dl = deadlineLabel(next?.fields.Deadline);
       return {
         id: w.id,
         name: w.fields.Name,
+        description: w.fields.Description || null,
         pct,
         next: next ? next.fields.Name : 'All caught up here',
         deadlineLabel: dl.label,
@@ -143,25 +177,22 @@ export function buildViewModel(
     };
   });
 
+  function toViewTask(t: AirtableRecord<TaskFields>): ViewTask {
+    const dl = deadlineLabel(t.fields.Deadline);
+    return {
+      id: t.id,
+      label: t.fields.Name,
+      done: !!t.fields.Done,
+      deadline: t.fields.Deadline || null,
+      deadlineLabel: dl.label,
+      overdue: dl.overdue,
+      ...taskContext(t),
+    };
+  }
+
   const openTasks: ViewTask[] = taskRecs
     .filter((t) => !t.fields.Done)
-    .map((t) => {
-      const wsId = (t.fields.Workstream || [])[0];
-      const ws = wsId ? workstreamById.get(wsId) : undefined;
-      const pId = ws ? (ws.fields.Pillar || [])[0] : undefined;
-      const pillar = pId ? pillarById.get(pId) : undefined;
-      const dl = deadlineLabel(t.fields.Deadline);
-      return {
-        id: t.id,
-        label: t.fields.Name,
-        pillarName: pillar?.fields.Name || 'Unassigned',
-        workstreamName: ws?.fields.Name || '',
-        done: false,
-        deadline: t.fields.Deadline || null,
-        deadlineLabel: dl.label,
-        overdue: dl.overdue,
-      };
-    })
+    .map(toViewTask)
     .sort((a, b) => {
       if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
       if (a.deadline && b.deadline) return a.deadline < b.deadline ? -1 : 1;
@@ -189,12 +220,7 @@ export function buildViewModel(
   function periodStats(matchesPeriod: (deadline: string) => boolean): PeriodStats {
     const items: PeriodTask[] = taskRecs
       .filter((t) => t.fields.Deadline && matchesPeriod(t.fields.Deadline))
-      .map((t) => ({
-        id: t.id,
-        label: t.fields.Name,
-        done: !!t.fields.Done,
-        deadlineLabel: deadlineLabel(t.fields.Deadline).label,
-      }))
+      .map(toViewTask)
       .sort((a, b) => {
         if (a.done !== b.done) return a.done ? 1 : -1;
         return 0;

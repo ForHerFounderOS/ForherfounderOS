@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { serif, sans } from '@/lib/theme';
 import type { ViewPillar, ViewTask } from '@/lib/model';
 import type { BoardState } from './BoardMeeting';
+import TaskDetailModal from './TaskDetail';
 
 const GREETING_NAME = '';
 
@@ -106,6 +107,7 @@ export default function Home({
   const [restOpen, setRestOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [energyLog, setEnergyLog] = useState<EnergyEntry[]>([]);
+  const [selectedTask, setSelectedTask] = useState<ViewTask | null>(null);
   const [lastVisit, setLastVisit] = useState<Snapshot | null>(null);
   const [lastVisitLoaded, setLastVisitLoaded] = useState(false);
   const snapshotSaved = useRef(false);
@@ -171,11 +173,41 @@ export default function Home({
   movementNotes.sort((a, b) => b.delta - a.delta);
   const topMovementNotes = movementNotes.slice(0, 3);
 
+  // The signature moment: whatever's most genuinely urgent right now, always
+  // in the same spot, always real — openTasks is already sorted overdue-first
+  // then soonest-deadline, so its head is exactly that.
+  const spotlightTask = openTasks[0] || null;
+  const spotlightState: 'overdue' | 'today' | 'upcoming' | 'open' | 'clear' = !spotlightTask
+    ? 'clear'
+    : spotlightTask.overdue
+    ? 'overdue'
+    : spotlightTask.deadlineLabel === 'Due today'
+    ? 'today'
+    : spotlightTask.deadline
+    ? 'upcoming'
+    : 'open';
+  const spotlightCopy: Record<typeof spotlightState, { eyebrow: string; bg: string }> = {
+    overdue: { eyebrow: 'Overdue', bg: '#A24E2E' },
+    today: { eyebrow: 'Due today', bg: '#A33757' },
+    upcoming: { eyebrow: 'Next up', bg: '#8A4F79' },
+    open: { eyebrow: 'On deck', bg: '#8F5A12' },
+    clear: { eyebrow: 'All clear', bg: '#4A5A3C' },
+  };
+  const spotlightStampText =
+    spotlightState === 'today'
+      ? 'Today'
+      : spotlightState === 'open' || spotlightState === 'clear'
+      ? '—'
+      : spotlightTask?.deadline
+      ? new Date(spotlightTask.deadline + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+      : '—';
+
   return (
     <div style={{ maxWidth: 1060, margin: '0 auto', padding: '40px 44px 140px 44px' }} className="fcc-fade-up">
       {/* The Brief */}
       <section
         style={{
+          position: 'relative',
           background: 'linear-gradient(160deg, #5E2246 0%, #4C1D3D 70%)',
           color: '#F1E9DE',
           borderRadius: 18,
@@ -183,6 +215,38 @@ export default function Home({
           boxShadow: '0 2px 4px rgba(43, 33, 24, 0.08), 0 18px 44px rgba(43, 33, 24, 0.18)',
         }}
       >
+        <button
+          onClick={() => spotlightTask && setSelectedTask(spotlightTask)}
+          title={spotlightTask ? `${spotlightTask.label} — click for details` : 'Nothing urgent right now'}
+          style={{
+            position: 'absolute',
+            top: -34,
+            right: 6,
+            width: 84,
+            height: 84,
+            borderRadius: '50%',
+            background: spotlightCopy[spotlightState].bg,
+            border: '3px double rgba(244, 237, 227, 0.65)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 2,
+            transform: 'rotate(-8deg)',
+            boxShadow: '0 10px 22px rgba(43, 33, 24, 0.32)',
+            cursor: spotlightTask ? 'pointer' : 'default',
+            fontFamily: sans,
+            padding: 0,
+          }}
+        >
+          <span style={{ fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255, 248, 240, 0.85)', fontWeight: 700 }}>
+            {spotlightCopy[spotlightState].eyebrow}
+          </span>
+          <span style={{ fontFamily: serif, fontSize: 16, color: '#FFF8F0', lineHeight: 1.15, textAlign: 'center', padding: '0 8px' }}>
+            {spotlightStampText}
+          </span>
+        </button>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 20, flexWrap: 'wrap' }}>
           <h1 style={{ margin: 0, fontFamily: serif, fontWeight: 400, fontSize: 34, letterSpacing: '0.005em' }}>
             {greetingText()}
@@ -369,9 +433,16 @@ export default function Home({
               {restOpen && (
                 <div style={{ borderTop: '1px solid #F0E9DD', padding: '6px 8px 10px 8px', display: 'flex', flexDirection: 'column' }}>
                   {visibleRest.map((task) => (
-                    <div key={task.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 9 }}>
+                    <div
+                      key={task.id}
+                      onClick={() => setSelectedTask(task)}
+                      style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 9, cursor: 'pointer' }}
+                    >
                       <button
-                        onClick={() => onToggleTask(task.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleTask(task.id);
+                        }}
                         style={{
                           width: 19,
                           height: 19,
@@ -520,6 +591,10 @@ export default function Home({
           )}
         </section>
       </div>
+
+      {selectedTask && (
+        <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} onToggleDone={onToggleTask} />
+      )}
     </div>
   );
 }

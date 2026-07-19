@@ -71,7 +71,14 @@ export default function Page() {
         {screen === 'brief' && <DailyBriefing openTasks={openTasks} tasksLoading={loading} tasksError={error} />}
         {screen === 'calendar' && <CalendarIntelligence />}
         {screen === 'progress' && (
-          <Progress pillars={pillars} stats={stats} board={board} monthly={monthly} quarterly={quarterly} />
+          <Progress
+            pillars={pillars}
+            stats={stats}
+            board={board}
+            monthly={monthly}
+            quarterly={quarterly}
+            onToggleTask={toggleTaskDone}
+          />
         )}
         {screen === 'knowledge' && <Knowledge />}
         {screen === 'journal' && <Journal />}
