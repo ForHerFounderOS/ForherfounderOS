@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ViewPillar, ViewTask, ParkingItem } from './model';
 
 type Stats = { total: number; completed: number; open: number; overdue: number };
-type Data = { pillars: ViewPillar[]; openTasks: ViewTask[]; parkingLot: ParkingItem[]; stats: Stats };
+type Monthly = { total: number; completed: number };
+type Data = { pillars: ViewPillar[]; openTasks: ViewTask[]; parkingLot: ParkingItem[]; stats: Stats; monthly: Monthly };
 
 export function useAppData() {
   const [data, setData] = useState<Data | null>(null);
