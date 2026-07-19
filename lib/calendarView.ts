@@ -9,6 +9,10 @@ function londonDayKey(iso: string): string {
 function londonTime(iso: string): string {
   return DateTime.fromISO(iso, { zone: 'utc' }).setZone(ZONE).toFormat('HH:mm');
 }
+function minutesSinceMidnight(iso: string): number {
+  const dt = DateTime.fromISO(iso, { zone: 'utc' }).setZone(ZONE);
+  return dt.hour * 60 + dt.minute;
+}
 
 export type ViewCalEvent = { id: string; time: string; label: string; allDay: boolean; protected?: boolean };
 export type ViewCalDay = { name: string; dateNum: string; isToday: boolean; events: ViewCalEvent[] };
@@ -35,20 +39,40 @@ export function groupByWeek(events: CalEvent[], weekStart: DateTime): ViewCalDay
   for (let i = 0; i < 7; i++) {
     const day = weekStart.plus({ days: i });
     const dayKey = day.toFormat('yyyy-MM-dd');
-    const dayEvents: ViewCalEvent[] = events
+
+    // All-day events sort first (-1), then everything else by time of day —
+    // the protected block included, so it lands wherever it actually falls
+    // instead of always pinning to the top of the column.
+    const withSortKey: (ViewCalEvent & { sortMinutes: number })[] = events
       .filter((e) => londonDayKey(e.startISO) === dayKey)
-      .map((e) => ({ id: e.id, time: e.allDay ? 'All day' : londonTime(e.startISO), label: e.title, allDay: e.allDay }));
+      .map((e) => ({
+        id: e.id,
+        time: e.allDay ? 'All day' : londonTime(e.startISO),
+        label: e.title,
+        allDay: e.allDay,
+        sortMinutes: e.allDay ? -1 : minutesSinceMidnight(e.startISO),
+      }));
 
     const block = PROTECTED_BLOCKS.find((b) => b.weekday === day.weekday);
     if (block) {
-      dayEvents.unshift({
+      withSortKey.push({
         id: `protected-${dayKey}`,
         time: `${formatHour(block.startHour)}–${formatHour(block.endHour)}`,
         label: block.label,
         allDay: false,
         protected: true,
+        sortMinutes: block.startHour * 60,
       });
     }
+
+    withSortKey.sort((a, b) => a.sortMinutes - b.sortMinutes);
+    const dayEvents: ViewCalEvent[] = withSortKey.map((e) => ({
+      id: e.id,
+      time: e.time,
+      label: e.label,
+      allDay: e.allDay,
+      protected: e.protected,
+    }));
 
     days.push({ name: day.toFormat('ccc'), dateNum: day.toFormat('d'), isToday: dayKey === todayKey, events: dayEvents });
   }
