@@ -104,7 +104,7 @@ export function getKnowledge() {
 export function updateTaskDone(id: string, done: boolean) {
   return airtableFetch(`/${encodeURIComponent(TABLES.tasks)}/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ fields: { Done: done } }),
+    body: JSON.stringify({ fields: { Done: done }, typecast: true }),
   });
 }
 
@@ -113,14 +113,14 @@ export function createTask(workstreamId: string, name: string, deadline?: string
   if (deadline) fields.Deadline = deadline;
   return airtableFetch(`/${encodeURIComponent(TABLES.tasks)}`, {
     method: 'POST',
-    body: JSON.stringify({ fields }),
+    body: JSON.stringify({ fields, typecast: true }),
   }) as Promise<AirtableRecord<TaskFields>>;
 }
 
 export function updatePillarActive(id: string, active: boolean) {
   return airtableFetch(`/${encodeURIComponent(TABLES.pillars)}/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ fields: { Active: active } }),
+    body: JSON.stringify({ fields: { Active: active }, typecast: true }),
   });
 }
 
@@ -139,15 +139,18 @@ export async function setTopPriorityWorkstream(workstreamId: string) {
     : currentMin - 1;
   return airtableFetch(`/${encodeURIComponent(TABLES.workstreams)}/${workstreamId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ fields: { 'Priority Order': target } }),
+    body: JSON.stringify({ fields: { 'Priority Order': target }, typecast: true }),
   });
 }
 
+// typecast lets Airtable create a new Knowledge "Type" select option on the
+// fly (e.g. "Weekly Review") instead of 422-ing when the option doesn't
+// already exist in the field's dropdown.
 export function createKnowledgeEntry(text: string, type: string) {
   const today = new Date().toISOString().slice(0, 10);
   return airtableFetch(`/${encodeURIComponent(TABLES.knowledge)}`, {
     method: 'POST',
-    body: JSON.stringify({ fields: { Text: text, Type: type, Date: today } }),
+    body: JSON.stringify({ fields: { Text: text, Type: type, Date: today }, typecast: true }),
   });
 }
 
@@ -155,7 +158,7 @@ export function createParkingLotItem(text: string) {
   const today = new Date().toISOString().slice(0, 10);
   return airtableFetch(`/${encodeURIComponent(TABLES.parkingLot)}`, {
     method: 'POST',
-    body: JSON.stringify({ fields: { Item: text, 'Date added': today } }),
+    body: JSON.stringify({ fields: { Item: text, 'Date added': today }, typecast: true }),
   });
 }
 

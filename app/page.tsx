@@ -83,7 +83,15 @@ export default function Page() {
         {screen === 'knowledge' && <Knowledge />}
         {screen === 'journal' && <Journal />}
         {screen === 'board' && (
-          <BoardMeeting pillars={pillars} board={board} setBoard={setBoard} onClose={() => setScreen('home')} refresh={refresh} />
+          <BoardMeeting
+            pillars={pillars}
+            openTasks={openTasks}
+            stats={stats}
+            board={board}
+            setBoard={setBoard}
+            onClose={() => setScreen('home')}
+            refresh={refresh}
+          />
         )}
         {screen === 'settings' && (
           <Settings pillars={pillars} loading={loading} error={error} onTogglePillar={togglePillarActive} />
