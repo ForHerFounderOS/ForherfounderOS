@@ -10,18 +10,46 @@ function londonTime(iso: string): string {
   return DateTime.fromISO(iso, { zone: 'utc' }).setZone(ZONE).toFormat('HH:mm');
 }
 
-export type ViewCalEvent = { id: string; time: string; label: string; allDay: boolean };
+export type ViewCalEvent = { id: string; time: string; label: string; allDay: boolean; protected?: boolean };
 export type ViewCalDay = { name: string; dateNum: string; isToday: boolean; events: ViewCalEvent[] };
 
-export function groupByWorkWeek(events: CalEvent[], weekStart: DateTime): ViewCalDay[] {
+type ProtectedBlock = { weekday: number; startHour: number; endHour: number; label: string };
+
+// Recovery time deliberately kept clear of ForHer work. A read-only ICS feed
+// has no way to carry "and don't book over this," so the app renders these
+// itself rather than depending on a real calendar event existing for them.
+// Luxon weekday: 1=Mon ... 7=Sun. Adjust the hours here if the real windows shift.
+const PROTECTED_BLOCKS: ProtectedBlock[] = [
+  { weekday: 3, startHour: 18, endHour: 22, label: 'Protected — recovery' }, // Wed evening
+  { weekday: 6, startHour: 12, endHour: 18, label: 'Protected — recovery' }, // Sat afternoon
+  { weekday: 7, startHour: 18, endHour: 22, label: 'Protected — recovery' }, // Sun evening
+];
+
+function formatHour(h: number): string {
+  return `${String(h).padStart(2, '0')}:00`;
+}
+
+export function groupByWeek(events: CalEvent[], weekStart: DateTime): ViewCalDay[] {
   const todayKey = DateTime.now().setZone(ZONE).toFormat('yyyy-MM-dd');
   const days: ViewCalDay[] = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 7; i++) {
     const day = weekStart.plus({ days: i });
     const dayKey = day.toFormat('yyyy-MM-dd');
-    const dayEvents = events
+    const dayEvents: ViewCalEvent[] = events
       .filter((e) => londonDayKey(e.startISO) === dayKey)
       .map((e) => ({ id: e.id, time: e.allDay ? 'All day' : londonTime(e.startISO), label: e.title, allDay: e.allDay }));
+
+    const block = PROTECTED_BLOCKS.find((b) => b.weekday === day.weekday);
+    if (block) {
+      dayEvents.unshift({
+        id: `protected-${dayKey}`,
+        time: `${formatHour(block.startHour)}–${formatHour(block.endHour)}`,
+        label: block.label,
+        allDay: false,
+        protected: true,
+      });
+    }
+
     days.push({ name: day.toFormat('ccc'), dateNum: day.toFormat('d'), isToday: dayKey === todayKey, events: dayEvents });
   }
   return days;

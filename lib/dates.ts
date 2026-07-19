@@ -11,8 +11,8 @@ export function londonTodayRange(base: Date = new Date()): { start: DateTime; en
   return { start, end: start.plus({ days: 1 }) };
 }
 
-// Monday through end-of-Friday, in London local time.
-export function londonWorkWeekRange(base: Date = new Date()): { start: DateTime; end: DateTime } {
+// Monday through end-of-Sunday, in London local time.
+export function londonCalendarWeekRange(base: Date = new Date()): { start: DateTime; end: DateTime } {
   const start = londonNow(base).startOf('week');
-  return { start, end: start.plus({ days: 5 }) };
+  return { start, end: start.plus({ days: 7 }) };
 }
