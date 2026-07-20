@@ -5,5 +5,6 @@ export type Screen =
   | 'progress'
   | 'knowledge'
   | 'journal'
+  | 'planner'
   | 'board'
   | 'settings';

@@ -8,6 +8,7 @@ import CalendarIntelligence from './components/CalendarIntelligence';
 import Progress from './components/Progress';
 import Knowledge from './components/Knowledge';
 import Journal from './components/Journal';
+import WeekPlanner from './components/WeekPlanner';
 import BoardMeeting, { DEFAULT_BOARD_STATE, type BoardState } from './components/BoardMeeting';
 import Settings from './components/Settings';
 import ParkingLot from './components/ParkingLot';
@@ -68,6 +69,9 @@ export default function Page() {
             error={error}
             onToggleTask={toggleTaskDone}
             firstMove={data?.firstMove || null}
+            priorityWorkstreamId={data?.priorityWorkstreamId || null}
+            priorityWorkstreamName={data?.priorityWorkstreamName || null}
+            priorities={data?.priorities || []}
             refresh={refresh}
           />
         )}
@@ -85,6 +89,16 @@ export default function Page() {
         )}
         {screen === 'knowledge' && <Knowledge />}
         {screen === 'journal' && <Journal />}
+        {screen === 'planner' && (
+          <WeekPlanner
+            pillars={pillars}
+            openTasks={openTasks}
+            loading={loading}
+            error={error}
+            onToggleTask={toggleTaskDone}
+            refresh={refresh}
+          />
+        )}
         {screen === 'board' && (
           <BoardMeeting
             pillars={pillars}

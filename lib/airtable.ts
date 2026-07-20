@@ -127,6 +127,13 @@ export function updateTaskPlannedDate(id: string, plannedDate: string) {
   });
 }
 
+export function clearTaskPlannedDate(id: string) {
+  return airtableFetch(`/${encodeURIComponent(TABLES.tasks)}/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ fields: { 'Planned Date': null }, typecast: true }),
+  });
+}
+
 export function updatePillarActive(id: string, active: boolean) {
   return airtableFetch(`/${encodeURIComponent(TABLES.pillars)}/${id}`, {
     method: 'PATCH',

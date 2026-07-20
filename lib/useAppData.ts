@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { ViewPillar, ViewTask, ParkingItem, PeriodStats } from './model';
+import type { ViewPillar, ViewTask, ParkingItem, PeriodStats, ViewPriority } from './model';
 
 type Stats = { total: number; completed: number; open: number; overdue: number };
 type Data = {
@@ -13,6 +13,9 @@ type Data = {
   monthly: PeriodStats;
   quarterly: PeriodStats;
   firstMove: ViewTask | null;
+  priorityWorkstreamId: string | null;
+  priorityWorkstreamName: string | null;
+  priorities: ViewPriority[];
 };
 
 export function useAppData() {

@@ -11,6 +11,7 @@ const NAV: { key: Screen; label: string }[] = [
   { key: 'progress', label: 'Progress' },
   { key: 'knowledge', label: 'Knowledge' },
   { key: 'journal', label: 'Journal' },
+  { key: 'planner', label: 'Weekly Planner' },
 ];
 
 type BoardMeetingInfo = { weekdayName: string; minutes: number | null; daysUntil: number };
