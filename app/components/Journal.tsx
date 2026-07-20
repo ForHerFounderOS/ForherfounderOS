@@ -3,45 +3,52 @@
 import { useState } from 'react';
 import { serif } from '@/lib/theme';
 
-const SEED: Record<string, string> = {
-  today: '',
-  'Sat 11 Jul': 'Slow start, but the pricing table finally makes sense once I stopped comparing feature lists and compared what people are actually paying for: reassurance, not data.',
-  'Fri 10 Jul': 'Interview #4 — the nurse practitioner. Best conversation yet. “The app should notice, not ask.” I keep coming back to that line. It might be the whole product.',
-  'Thu 9 Jul': 'Tired. Did the minimum — one AWS session — and let that be enough. The system said nothing, which is exactly why it works.',
-  'Wed 8 Jul': 'Protected evening held. Realised I plan better on paper first, then transfer. Keep that.',
-};
+const STORAGE_KEY = 'fcc-journal';
 
-function todayLabel() {
-  return new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+// Real calendar date, not the literal string "today" — that was the bug:
+// every entry ever written landed in the same non-dated slot, so nothing
+// ever became a real, distinct past day.
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function dayLabel(key: string): string {
+  return new Date(key + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 function loadEntries(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
   try {
-    const saved = JSON.parse(localStorage.getItem('fcc-journal') || 'null');
-    if (saved) return { ...SEED, ...saved };
-  } catch {}
-  return SEED;
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    return saved && typeof saved === 'object' ? saved : {};
+  } catch {
+    return {};
+  }
 }
 
 export default function Journal() {
+  const todayKey = dateKey(new Date());
   const [entries, setEntries] = useState<Record<string, string>>(loadEntries);
-  const [selected, setSelected] = useState('today');
+  const [selected, setSelected] = useState(todayKey);
 
   const updateToday = (val: string) => {
     setEntries((e) => {
-      const next = { ...e, today: val };
+      const next = { ...e, [todayKey]: val };
       try {
-        localStorage.setItem('fcc-journal', JSON.stringify(next));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       } catch {}
       return next;
     });
   };
 
-  const isToday = selected === 'today';
-  const label = isToday ? todayLabel() : selected;
-  const pastKeys = Object.keys(entries).filter((k) => k !== 'today');
-  const dates = [{ key: 'today', label: todayLabel(), text: entries.today }].concat(
-    pastKeys.map((k) => ({ key: k, label: k, text: entries[k] }))
+  const isToday = selected === todayKey;
+  const label = dayLabel(selected);
+  // Only real, actually-written entries — no seeded placeholder days.
+  const pastKeys = Object.keys(entries)
+    .filter((k) => k !== todayKey && entries[k]?.trim())
+    .sort((a, b) => (a < b ? 1 : -1));
+  const dates = [{ key: todayKey, label: dayLabel(todayKey), text: entries[todayKey] || '' }].concat(
+    pastKeys.map((k) => ({ key: k, label: dayLabel(k), text: entries[k] }))
   );
 
   return (
@@ -77,7 +84,7 @@ export default function Journal() {
               >
                 <span style={{ fontSize: 13.5, fontWeight: active ? 600 : 400, color: active ? '#A33757' : '#5C5145' }}>{d.label}</span>
                 <span style={{ fontSize: 11, color: '#A79A8A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
-                  {d.text ? d.text.slice(0, 40) : d.key === 'today' ? 'Not written yet' : ''}
+                  {d.text ? d.text.slice(0, 40) : d.key === todayKey ? 'Not written yet' : ''}
                 </span>
               </button>
             );
@@ -96,7 +103,7 @@ export default function Journal() {
           {isToday ? (
             <>
               <textarea
-                value={entries.today}
+                value={entries[todayKey] || ''}
                 onChange={(e) => updateToday(e.target.value)}
                 placeholder="How did today actually go?"
                 style={{ flex: 1, marginTop: 16, width: '100%', minHeight: 280, resize: 'vertical', fontFamily: serif, fontSize: 16.5, lineHeight: 1.7, color: '#2B2118', background: 'transparent', border: 'none', padding: 0 }}
