@@ -3,20 +3,21 @@
 import { useEffect, useState } from 'react';
 import { serif } from '@/lib/theme';
 import type { ViewTask } from '@/lib/model';
+import { formatLongDate } from '@/lib/dateFormat';
 
 type ViewCalEvent = { id: string; time: string; label: string; allDay: boolean };
 type ViewCalDay = { name: string; dateNum: string; isToday: boolean; events: ViewCalEvent[] };
 
 function todayLineText() {
-  return new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  return formatLongDate(new Date());
 }
 
 export default function DailyBriefing({
-  openTasks,
+  todayPlan,
   tasksLoading,
   tasksError,
 }: {
-  openTasks: ViewTask[];
+  todayPlan: ViewTask[];
   tasksLoading: boolean;
   tasksError: string | null;
 }) {
@@ -48,8 +49,13 @@ export default function DailyBriefing({
     };
   }, []);
 
-  const deadlineTasks = openTasks.filter((t) => t.deadlineLabel);
-  const otherTasks = openTasks.filter((t) => !t.deadlineLabel).slice(0, 4);
+  // Everything below is scoped to todayPlan — tasks actually assigned a
+  // Planned Date of today at the Board Meeting — not the whole open-task
+  // backlog. A briefing that says "3 planned for today" and then only ever
+  // shows 3 tasks can't contradict itself the way "18 open tasks" next to
+  // an empty-looking list used to.
+  const deadlineTasks = todayPlan.filter((t) => t.deadlineLabel);
+  const otherTasks = todayPlan.filter((t) => !t.deadlineLabel);
 
   const loading = calLoading || tasksLoading;
   const error = calError || tasksError;
@@ -57,9 +63,9 @@ export default function DailyBriefing({
 
   const summary = loading
     ? 'Reading today…'
-    : `${eventCount} calendar event${eventCount === 1 ? '' : 's'} today · ${openTasks.length} open task${
-        openTasks.length === 1 ? '' : 's'
-      }${deadlineTasks.length ? `, ${deadlineTasks.length} with a deadline` : ''}.`;
+    : `${eventCount} calendar event${eventCount === 1 ? '' : 's'} today · ${todayPlan.length} planned for today${
+        deadlineTasks.length ? `, ${deadlineTasks.length} with a deadline` : ''
+      }.`;
 
   return (
     <div style={{ maxWidth: 780, margin: '0 auto', padding: '46px 44px 140px 44px' }} className="fcc-fade-up">
@@ -131,7 +137,7 @@ export default function DailyBriefing({
             }}
           >
             <div style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#B07A20', marginBottom: 10 }}>
-              Deadlines in view
+              Today&rsquo;s deadlines
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9, fontSize: 13.5, lineHeight: 1.5, color: '#3A2F24' }}>
               {deadlineTasks.map((t) => (
@@ -142,7 +148,7 @@ export default function DailyBriefing({
                   {t.pillarName ? ` — ${t.pillarName}` : ''}
                 </div>
               ))}
-              {!tasksLoading && deadlineTasks.length === 0 && <div style={{ color: '#A79A8A' }}>Nothing flagged right now.</div>}
+              {!tasksLoading && deadlineTasks.length === 0 && <div style={{ color: '#A79A8A' }}>Nothing due today.</div>}
             </div>
           </div>
           <div
@@ -155,13 +161,13 @@ export default function DailyBriefing({
             }}
           >
             <div style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#A79A8A', marginBottom: 10 }}>
-              Also on your list
+              Also queued today
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9, fontSize: 13.5, lineHeight: 1.5, color: '#3A2F24' }}>
               {otherTasks.map((t) => (
                 <div key={t.id}>{t.label}</div>
               ))}
-              {!tasksLoading && otherTasks.length === 0 && <div style={{ color: '#A79A8A' }}>Nothing else open.</div>}
+              {!tasksLoading && otherTasks.length === 0 && <div style={{ color: '#A79A8A' }}>Nothing else queued for today.</div>}
             </div>
           </div>
         </div>

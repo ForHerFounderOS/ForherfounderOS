@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { createTask, updateTaskDone, createKnowledgeEntry, setTopPriorityWorkstream } from '@/lib/airtable';
+import { createTask, updateTaskDone, updateTaskPlannedDate, createKnowledgeEntry, setTopPriorityWorkstream } from '@/lib/airtable';
 
 export const dynamic = 'force-dynamic';
 
 type OutcomeInput = { text: string; done: boolean; workstreamId: string | null; taskId: string | null };
 type DecisionInput = { id: number; text: string; recorded?: boolean };
+type DayPlanInput = { date: string; text: string; workstreamId: string | null; taskId: string | null };
 
 // This is the one place the Board Meeting actually changes the business,
 // rather than just recording notes about it: real Task rows get created
@@ -17,6 +18,7 @@ export async function POST(req: Request) {
   const body = await req.json();
   const outcomes: OutcomeInput[] = Array.isArray(body.outcomes) ? body.outcomes : [];
   const decisions: DecisionInput[] = Array.isArray(body.decisions) ? body.decisions : [];
+  const dailyPlan: DayPlanInput[] = Array.isArray(body.dailyPlan) ? body.dailyPlan : [];
   const priorityWorkstreamId: string | null = body.priorityWorkstreamId || null;
   const wins: string[] = Array.isArray(body.wins) ? body.wins : [];
   const planRecovery: string = body.planRecovery || '';
@@ -39,6 +41,26 @@ export async function POST(req: Request) {
       errors.push(`Outcome "${o.text}": ${err instanceof Error ? err.message : String(err)}`);
     }
     outcomeTaskIds.push(taskId);
+  }
+
+  // The daily planner: existing open tasks get their Planned Date set to
+  // the assigned day; new ones (typed directly into a day) get created
+  // there and planned in one step. Real day-by-day allocation against real
+  // calendar capacity, not just three outcomes for the whole week.
+  const dailyPlanTaskIds: (string | null)[] = [];
+  for (const item of dailyPlan) {
+    let taskId = item.taskId;
+    try {
+      if (!taskId && item.text.trim() && item.workstreamId) {
+        const rec = await createTask(item.workstreamId, item.text.trim(), undefined, item.date);
+        taskId = rec.id;
+      } else if (taskId) {
+        await updateTaskPlannedDate(taskId, item.date);
+      }
+    } catch (err) {
+      errors.push(`Daily plan "${item.text}": ${err instanceof Error ? err.message : String(err)}`);
+    }
+    dailyPlanTaskIds.push(taskId);
   }
 
   const decisionsRecorded: number[] = [];
@@ -77,5 +99,5 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ outcomeTaskIds, decisionsRecorded, weeklyReviewCreated, priorityUpdated, errors });
+  return NextResponse.json({ outcomeTaskIds, dailyPlanTaskIds, decisionsRecorded, weeklyReviewCreated, priorityUpdated, errors });
 }

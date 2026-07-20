@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const [pillars, workstreams, tasks] = await Promise.all([getPillars(), getWorkstreams(), getTasks()]);
-    const { openTasks } = buildViewModel(pillars, workstreams, tasks, []);
+    const { openTasks, firstMove } = buildViewModel(pillars, workstreams, tasks, []);
 
     // Calendar is best-effort: if it's unconfigured or a feed has a bad
     // moment, the task-based brief should still go out rather than nothing.
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
       calendarError = err instanceof Error ? err.message : String(err);
     }
 
-    const message = formatBriefMessage(openTasks, calendarEvents, now);
+    const message = formatBriefMessage(firstMove, openTasks, calendarEvents, now);
 
     if (dryRun) {
       return NextResponse.json({

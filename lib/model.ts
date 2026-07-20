@@ -29,6 +29,8 @@ export type ViewTask = {
   earliestActionDate: string | null; // ISO
   notYetActionable: boolean;
   notYetActionableLabel: string | null;
+  plannedDate: string | null; // ISO — assigned at the Board Meeting's daily planner
+  plannedDateLabel: string | null;
 };
 
 export type ViewWorkstream = {
@@ -83,6 +85,13 @@ function notYetActionableLabel(iso: string | null): string | null {
   if (!iso) return null;
   const d = new Date(iso + 'T00:00:00');
   return `Not yet actionable — opens ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+}
+
+function plannedDateLabelFor(iso: string | null, todayStr: string): string | null {
+  if (!iso) return null;
+  if (iso === todayStr) return 'Planned for today';
+  const d = new Date(iso + 'T00:00:00');
+  return `Planned ${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`;
 }
 
 // Falls back to matching this name when the Pillars table has no "Primary"
@@ -173,6 +182,7 @@ export function buildViewModel(
     const dl = deadlineLabel(t.fields.Deadline);
     const earliestActionDate = t.fields['Earliest Action Date'] || null;
     const notYetActionable = !isActionable(t);
+    const plannedDate = t.fields['Planned Date'] || null;
     return {
       id: t.id,
       label: t.fields.Name,
@@ -183,6 +193,8 @@ export function buildViewModel(
       earliestActionDate,
       notYetActionable,
       notYetActionableLabel: notYetActionable ? notYetActionableLabel(earliestActionDate) : null,
+      plannedDate,
+      plannedDateLabel: plannedDateLabelFor(plannedDate, todayStr),
       ...taskContext(t),
     };
   }
@@ -273,6 +285,12 @@ export function buildViewModel(
       return 0;
     });
 
+  // What's actually queued for today — assigned a Planned Date at the Board
+  // Meeting's daily planner, not just "somewhere in the open backlog." This
+  // is what Home's "Rest of today" and the Daily Briefing should show;
+  // openTasks above stays the full backlog for Company Review, Progress, etc.
+  const todayPlan: ViewTask[] = openTasks.filter((t) => t.plannedDate === todayStr);
+
   const parkingLot: ParkingItem[] = parkingRecs
     .slice()
     .sort((a, b) => (a.createdTime < b.createdTime ? 1 : -1))
@@ -309,5 +327,5 @@ export function buildViewModel(
     return Number(y) === now.getFullYear() && Math.ceil(Number(m) / 3) === currentQuarter;
   });
 
-  return { pillars, openTasks, parkingLot, stats, monthly, quarterly, firstMove };
+  return { pillars, openTasks, todayPlan, parkingLot, stats, monthly, quarterly, firstMove };
 }

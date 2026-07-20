@@ -123,6 +123,21 @@ export function eventsOnDay(events: CalEvent[], day: DateTime): ViewCalEvent[] {
     }));
 }
 
+// How much real work a day can hold, given how much of it is already
+// booked (calendar events + protected recovery blocks, in minutes). This is
+// a deliberate judgment call, not a measured constant — a free day gets a
+// generous, substantial block; a day already carrying a full shift is
+// capped to a realistic post-shift window; the busiest days still protect
+// a floor rather than being planned down to nothing. Tune the thresholds
+// here if they don't match reality.
+export function dayCapacityMinutes(bookedMinutes: number): number {
+  if (bookedMinutes <= 0) return 360; // free day — substantially more room
+  if (bookedMinutes < 180) return 300; // lightly booked — still mostly open
+  if (bookedMinutes < 420) return 210; // a real chunk of the day is spoken for
+  if (bookedMinutes < 540) return 150; // roughly a full shift (~7-9h) booked
+  return 120; // the heaviest days — protect a floor rather than zero it out
+}
+
 export type BoardMeetingInfo = { weekdayName: string; minutes: number | null; daysUntil: number };
 
 // Finds the next real "Board Meeting" event in the feed (matched by title,

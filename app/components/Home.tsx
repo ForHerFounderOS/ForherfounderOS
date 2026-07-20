@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { serif, sans } from '@/lib/theme';
 import type { ViewPillar, ViewTask, ViewWorkstream } from '@/lib/model';
 import type { ViewCalDay } from '@/lib/calendarView';
+import { formatLongDate } from '@/lib/dateFormat';
 import TaskDetailModal from './TaskDetail';
 import WorkstreamDetailModal from './WorkstreamDetail';
 
@@ -15,7 +16,7 @@ function greetingText() {
   return GREETING_NAME ? `${g}, ${GREETING_NAME}.` : `${g}.`;
 }
 function todayLineText() {
-  return new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  return formatLongDate(new Date());
 }
 
 const badgeStyle: React.CSSProperties = {
@@ -91,6 +92,7 @@ function saveSnapshot(s: Snapshot) {
 export default function Home({
   pillars,
   openTasks,
+  todayPlan,
   stats,
   loading,
   error,
@@ -100,6 +102,7 @@ export default function Home({
 }: {
   pillars: ViewPillar[];
   openTasks: ViewTask[];
+  todayPlan: ViewTask[];
   stats: { total: number; completed: number; open: number; overdue: number };
   loading: boolean;
   error: string | null;
@@ -198,10 +201,13 @@ export default function Home({
     }
   };
 
-  // Rest of today mirrors First Move: nothing's been deliberately planned
-  // until a Board Meeting has actually run, so don't dump the raw task list.
+  // Rest of today is the real day queue — tasks actually assigned a Planned
+  // Date of today at the Board Meeting's daily planner — not the entire
+  // open backlog across every workstream. Nothing planned for today reads
+  // the same whether that's because everything's done or nothing was ever
+  // queued; both are honestly "nothing queued."
   const boardHasRun = !!firstMove;
-  const rest = boardHasRun ? openTasks.filter((t) => t.id !== firstMove?.id) : [];
+  const rest = todayPlan.filter((t) => t.id !== firstMove?.id);
   const visibleRest = Number.isFinite(taskCap) ? rest.slice(0, taskCap) : rest;
   const hiddenCount = rest.length - visibleRest.length;
   const allDone = !loading && boardHasRun && openTasks.length === 0;
@@ -490,96 +496,87 @@ export default function Home({
           </div>
 
           {/* Rest of today */}
-          {!boardHasRun ? (
-            <div style={{ background: '#F1EBE0', border: '1px solid #DDD2C1', borderRadius: 14, padding: '20px 22px' }}>
-              <div style={{ fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#A79A8A' }}>
-                Rest of today
-              </div>
-              <div style={{ marginTop: 10, fontSize: 13.5, lineHeight: 1.5, color: '#7A6E60' }}>
-                Nothing queued yet — runs at Sunday&rsquo;s Board Meeting.
-              </div>
-            </div>
-          ) : (
-            <div style={{ background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05), 0 8px 22px rgba(43, 33, 24, 0.07)', overflow: 'hidden' }}>
-              <button
-                onClick={() => setRestOpen((o) => !o)}
-                style={{
-                  display: 'flex',
-                  width: '100%',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  border: 'none',
-                  background: 'none',
-                  cursor: 'pointer',
-                  padding: '15px 20px',
-                  fontFamily: sans,
-                  fontSize: 13.5,
-                  fontWeight: 500,
-                  color: '#5C5145',
-                }}
-              >
-                <span>
-                  Rest of today · {rest.length === 0 ? 'all done' : `${rest.length} item${rest.length === 1 ? '' : 's'}`}
-                </span>
-                <span style={{ color: '#A79A8A', fontSize: 11 }}>{restOpen ? '▲' : '▼'}</span>
-              </button>
-              {restOpen && (
-                <div style={{ borderTop: '1px solid #F0E9DD', padding: '6px 8px 10px 8px', display: 'flex', flexDirection: 'column' }}>
-                  {visibleRest.map((task) => (
-                    <div
-                      key={task.id}
-                      onClick={() => setSelectedTask(task)}
-                      style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 9, cursor: 'pointer' }}
-                    >
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleTask(task.id);
-                        }}
-                        style={{
-                          width: 19,
-                          height: 19,
-                          flexShrink: 0,
-                          marginTop: 1,
-                          borderRadius: 6,
-                          cursor: 'pointer',
-                          border: '1.5px solid #C4B7A5',
-                          background: 'transparent',
-                          color: '#FFFDF8',
-                          fontSize: 11,
-                          lineHeight: 1,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: 0,
-                        }}
-                      />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, lineHeight: 1.45, color: '#3A2F24' }}>{task.label}</div>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 11, color: '#A79A8A' }}>
-                            {task.pillarName}
-                            {task.workstreamName ? ` · ${task.workstreamName}` : ''}
-                          </span>
-                          {task.deadlineLabel && <span style={badgeStyle}>{task.deadlineLabel}</span>}
-                        </div>
+          <div style={{ background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05), 0 8px 22px rgba(43, 33, 24, 0.07)', overflow: 'hidden' }}>
+            <button
+              onClick={() => setRestOpen((o) => !o)}
+              style={{
+                display: 'flex',
+                width: '100%',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                padding: '15px 20px',
+                fontFamily: sans,
+                fontSize: 13.5,
+                fontWeight: 500,
+                color: '#5C5145',
+              }}
+            >
+              <span>
+                Rest of today · {rest.length === 0 ? 'nothing queued' : `${rest.length} item${rest.length === 1 ? '' : 's'}`}
+              </span>
+              <span style={{ color: '#A79A8A', fontSize: 11 }}>{restOpen ? '▲' : '▼'}</span>
+            </button>
+            {restOpen && (
+              <div style={{ borderTop: '1px solid #F0E9DD', padding: '6px 8px 10px 8px', display: 'flex', flexDirection: 'column' }}>
+                {visibleRest.map((task) => (
+                  <div
+                    key={task.id}
+                    onClick={() => setSelectedTask(task)}
+                    style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 9, cursor: 'pointer' }}
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleTask(task.id);
+                      }}
+                      style={{
+                        width: 19,
+                        height: 19,
+                        flexShrink: 0,
+                        marginTop: 1,
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        border: '1.5px solid #C4B7A5',
+                        background: 'transparent',
+                        color: '#FFFDF8',
+                        fontSize: 11,
+                        lineHeight: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
+                      }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, lineHeight: 1.45, color: '#3A2F24' }}>{task.label}</div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, color: '#A79A8A' }}>
+                          {task.pillarName}
+                          {task.workstreamName ? ` · ${task.workstreamName}` : ''}
+                        </span>
+                        {task.deadlineLabel && <span style={badgeStyle}>{task.deadlineLabel}</span>}
                       </div>
                     </div>
-                  ))}
-                  {rest.length === 0 && (
-                    <div style={{ padding: '10px 12px', fontSize: 13, color: '#A79A8A' }}>Nothing else queued.</div>
-                  )}
-                  {hiddenCount > 0 && (
-                    <div style={{ padding: '8px 12px 4px 12px', fontSize: 12, color: '#A79A8A', fontStyle: 'italic' }}>
-                      {limitedByCalendar
-                        ? `${hiddenCount} more hidden — today’s calendar is packed, keeping the list light.`
-                        : `${hiddenCount} more hidden — energy’s low, keeping today light.`}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                  </div>
+                ))}
+                {rest.length === 0 && (
+                  <div style={{ padding: '10px 12px', fontSize: 13, color: '#A79A8A' }}>
+                    Nothing queued for today — assign tasks to specific days at the Board Meeting.
+                  </div>
+                )}
+                {hiddenCount > 0 && (
+                  <div style={{ padding: '8px 12px 4px 12px', fontSize: 12, color: '#A79A8A', fontStyle: 'italic' }}>
+                    {limitedByCalendar
+                      ? `${hiddenCount} more hidden — today’s calendar is packed, keeping the list light.`
+                      : `${hiddenCount} more hidden — energy’s low, keeping today light.`}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </section>
 
         {/* PILLARS */}

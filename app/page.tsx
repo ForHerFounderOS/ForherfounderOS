@@ -48,6 +48,7 @@ export default function Page() {
 
   const pillars = data?.pillars || [];
   const openTasks = data?.openTasks || [];
+  const todayPlan = data?.todayPlan || [];
   const parkingLot = data?.parkingLot || [];
   const stats = data?.stats || { total: 0, completed: 0, open: 0, overdue: 0 };
   const monthly = data?.monthly || { total: 0, completed: 0, items: [] };
@@ -61,6 +62,7 @@ export default function Page() {
           <Home
             pillars={pillars}
             openTasks={openTasks}
+            todayPlan={todayPlan}
             stats={stats}
             loading={loading}
             error={error}
@@ -69,7 +71,7 @@ export default function Page() {
             refresh={refresh}
           />
         )}
-        {screen === 'brief' && <DailyBriefing openTasks={openTasks} tasksLoading={loading} tasksError={error} />}
+        {screen === 'brief' && <DailyBriefing todayPlan={todayPlan} tasksLoading={loading} tasksError={error} />}
         {screen === 'calendar' && <CalendarIntelligence />}
         {screen === 'progress' && (
           <Progress

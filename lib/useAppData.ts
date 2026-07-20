@@ -7,6 +7,7 @@ type Stats = { total: number; completed: number; open: number; overdue: number }
 type Data = {
   pillars: ViewPillar[];
   openTasks: ViewTask[];
+  todayPlan: ViewTask[];
   parkingLot: ParkingItem[];
   stats: Stats;
   monthly: PeriodStats;
