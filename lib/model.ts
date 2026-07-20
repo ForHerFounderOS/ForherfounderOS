@@ -59,6 +59,8 @@ export type ViewPillar = {
 
 export type ParkingItem = { id: string; text: string; dateAdded: string | null };
 
+export type ViewPriority = { workstreamId: string; workstreamName: string; task: ViewTask | null };
+
 export type PeriodTask = ViewTask;
 export type PeriodStats = { total: number; completed: number; items: PeriodTask[] };
 
@@ -273,6 +275,19 @@ export function buildViewModel(
   const topWorkstream = prioritizedWorkstreams[0] || null;
   const topTask = topWorkstream ? nextTaskByWorkstream.get(topWorkstream.id) : null;
   const firstMove: ViewTask | null = topTask ? toViewTask(topTask) : null;
+  // Distinct from firstMove: a priority can be set and still have no open
+  // task in that workstream (everything done, or nothing added yet). The UI
+  // needs to tell those two "nothing to show" cases apart.
+  const priorityWorkstreamId: string | null = topWorkstream ? topWorkstream.id : null;
+  const priorityWorkstreamName: string | null = topWorkstream ? topWorkstream.fields.Name : null;
+
+  // The ranked list behind First Move, not just its head — so the app can
+  // show "this week's priorities" as more than one workstream at a time
+  // without changing what strictly wins the top slot.
+  const priorities: ViewPriority[] = prioritizedWorkstreams.slice(0, 5).map((w) => {
+    const t = nextTaskByWorkstream.get(w.id);
+    return { workstreamId: w.id, workstreamName: w.fields.Name, task: t ? toViewTask(t) : null };
+  });
 
   const openTasks: ViewTask[] = taskRecs
     .filter((t) => !t.fields.Done && isActionable(t))
@@ -327,5 +342,17 @@ export function buildViewModel(
     return Number(y) === now.getFullYear() && Math.ceil(Number(m) / 3) === currentQuarter;
   });
 
-  return { pillars, openTasks, todayPlan, parkingLot, stats, monthly, quarterly, firstMove };
+  return {
+    pillars,
+    openTasks,
+    todayPlan,
+    parkingLot,
+    stats,
+    monthly,
+    quarterly,
+    firstMove,
+    priorityWorkstreamId,
+    priorityWorkstreamName,
+    priorities,
+  };
 }

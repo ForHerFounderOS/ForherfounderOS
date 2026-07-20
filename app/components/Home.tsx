@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { serif, sans } from '@/lib/theme';
-import type { ViewPillar, ViewTask, ViewWorkstream } from '@/lib/model';
+import type { ViewPillar, ViewTask, ViewWorkstream, ViewPriority } from '@/lib/model';
 import type { ViewCalDay } from '@/lib/calendarView';
 import { formatLongDate } from '@/lib/dateFormat';
 import TaskDetailModal from './TaskDetail';
@@ -98,6 +98,9 @@ export default function Home({
   error,
   onToggleTask,
   firstMove,
+  priorityWorkstreamId,
+  priorityWorkstreamName,
+  priorities,
   refresh,
 }: {
   pillars: ViewPillar[];
@@ -108,6 +111,9 @@ export default function Home({
   error: string | null;
   onToggleTask: (id: string) => void;
   firstMove: ViewTask | null;
+  priorityWorkstreamId: string | null;
+  priorityWorkstreamName: string | null;
+  priorities: ViewPriority[];
   refresh: () => void;
 }) {
   const [restOpen, setRestOpen] = useState(false);
@@ -180,7 +186,15 @@ export default function Home({
   const limitedByCalendar = calendarCap < Infinity && calendarCap <= energyCap;
 
   const activePillars = pillars.filter((p) => p.primary || p.active);
-  const priorityOptions = activePillars.flatMap((p) => p.workstreams.map((w) => ({ id: w.id, label: `${p.name} · ${w.name}` })));
+  // ws.next already reads "All caught up here" when the workstream has no
+  // open/actionable task — reuse that instead of recomputing it, so a
+  // picker option can warn before you pick a dead end.
+  const priorityOptions = activePillars.flatMap((p) =>
+    p.workstreams.map((w) => ({
+      id: w.id,
+      label: `${p.name} · ${w.name}${w.next === 'All caught up here' ? ' — no open tasks' : ''}`,
+    }))
+  );
   const handlePriorityChange = async (workstreamId: string) => {
     if (!workstreamId) return;
     setPriorityChanging(true);
@@ -206,7 +220,10 @@ export default function Home({
   // open backlog across every workstream. Nothing planned for today reads
   // the same whether that's because everything's done or nothing was ever
   // queued; both are honestly "nothing queued."
-  const boardHasRun = !!firstMove;
+  // A priority being set (not just firstMove being non-null) is what "the
+  // board has run" actually means — a priority workstream with zero open
+  // tasks right now still counts as having been set.
+  const boardHasRun = !!priorityWorkstreamId;
   const rest = todayPlan.filter((t) => t.id !== firstMove?.id);
   const visibleRest = Number.isFinite(taskCap) ? rest.slice(0, taskCap) : rest;
   const hiddenCount = rest.length - visibleRest.length;
@@ -462,11 +479,21 @@ export default function Home({
                 {`Top priority for ${firstMove.workstreamName || 'this week'} · set at Sunday’s Board Meeting.`}
               </div>
             </button>
+          ) : priorityWorkstreamId ? (
+            <div style={{ background: '#F1EBE0', border: '1px solid #DDD2C1', borderRadius: 14, padding: '20px 22px' }}>
+              <div style={{ fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#A79A8A' }}>First move</div>
+              <div style={{ marginTop: 10, fontFamily: serif, fontSize: 16.5, lineHeight: 1.4, fontWeight: 400, color: '#7A6E60' }}>
+                {priorityWorkstreamName} is your priority, but it has no open tasks right now.
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12.5, color: '#A79A8A', lineHeight: 1.5 }}>
+                Add a task to it, or pick a different priority below.
+              </div>
+            </div>
           ) : (
             <div style={{ background: '#F1EBE0', border: '1px solid #DDD2C1', borderRadius: 14, padding: '20px 22px' }}>
               <div style={{ fontSize: 10.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#A79A8A' }}>First move</div>
               <div style={{ marginTop: 10, fontFamily: serif, fontSize: 16.5, lineHeight: 1.4, fontWeight: 400, color: '#7A6E60' }}>
-                No priority set yet — runs at Sunday&rsquo;s Board Meeting.
+                No priority set yet — runs at Sunday&rsquo;s Board Meeting, or pick one below.
               </div>
             </div>
           )}
@@ -494,6 +521,43 @@ export default function Home({
               Writes Priority Order in Airtable immediately — First move above updates right after.
             </p>
           </div>
+
+          {/* This week's priorities — the ranked list behind First Move, not
+              just its head. One strict #1 still wins First Move; this is
+              what's lined up behind it. */}
+          {priorities.length > 0 && (
+            <div style={{ background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, padding: '14px 18px', boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05)' }}>
+              <div style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#A79A8A', marginBottom: 8 }}>
+                This week&rsquo;s priorities
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {priorities.map((p, i) => (
+                  <div
+                    key={p.workstreamId}
+                    onClick={() => p.task && setSelectedTask(p.task)}
+                    style={{
+                      display: 'flex',
+                      gap: 10,
+                      alignItems: 'flex-start',
+                      padding: '8px 4px',
+                      borderTop: i === 0 ? 'none' : '1px solid #F3EDE1',
+                      cursor: p.task ? 'pointer' : 'default',
+                    }}
+                  >
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#A79A8A', width: 14, flexShrink: 0, paddingTop: 1 }}>
+                      {i + 1}
+                    </span>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 12, color: '#A79A8A' }}>{p.workstreamName}</div>
+                      <div style={{ fontSize: 13, color: p.task ? '#3A2F24' : '#A79A8A', lineHeight: 1.4 }}>
+                        {p.task ? p.task.label : 'No open tasks'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Rest of today */}
           <div style={{ background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05), 0 8px 22px rgba(43, 33, 24, 0.07)', overflow: 'hidden' }}>
