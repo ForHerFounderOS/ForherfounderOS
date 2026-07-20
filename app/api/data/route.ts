@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getPillars, getWorkstreams, getTasks, getParkingLot } from '@/lib/airtable';
 import { buildViewModel } from '@/lib/model';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const [pillars, workstreams, tasks, parkingLot] = await Promise.all([
