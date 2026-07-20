@@ -65,6 +65,7 @@ export type TaskFields = {
   Done?: boolean;
   Deadline?: string; // ISO date
   Estimate?: number; // minutes
+  'Earliest Action Date'?: string; // ISO date — task isn't actionable before this
 };
 export type ParkingLotFields = {
   Item: string;

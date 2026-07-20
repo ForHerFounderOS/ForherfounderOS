@@ -26,6 +26,9 @@ export type ViewTask = {
   deadline: string | null; // ISO
   deadlineLabel: string | null;
   overdue: boolean;
+  earliestActionDate: string | null; // ISO
+  notYetActionable: boolean;
+  notYetActionableLabel: string | null;
 };
 
 export type ViewWorkstream = {
@@ -35,6 +38,10 @@ export type ViewWorkstream = {
   pct: number; // 0..100
   next: string;
   deadlineLabel: string | null;
+  // Every task in this workstream, done or not, actionable or not — the
+  // real backing list for the workstream's own detail view, so a task
+  // gated by Earliest Action Date is deferred, not lost.
+  tasks: ViewTask[];
 };
 
 export type ViewPillar = {
@@ -63,6 +70,19 @@ function deadlineLabel(iso: string | null | undefined): { label: string | null; 
   if (diffDays === 0) return { label: 'Due today', overdue: false };
   if (diffDays <= 6) return { label: 'Due ' + d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' }), overdue: false };
   return { label: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), overdue: false };
+}
+
+// Local wall-clock date, not UTC — matches how deadlineLabel already
+// compares "today" elsewhere in this file.
+function todayDateStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function notYetActionableLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso + 'T00:00:00');
+  return `Not yet actionable — opens ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
 }
 
 // Falls back to matching this name when the Pillars table has no "Primary"
@@ -97,9 +117,19 @@ export function buildViewModel(
   }
   const workstreamById = new Map(workstreamRecs.map((w) => [w.id, w]));
   const pillarById = new Map(pillarRecs.map((p) => [p.id, p]));
+  const todayStr = todayDateStr();
 
+  function isActionable(t: AirtableRecord<TaskFields>): boolean {
+    const ead = t.fields['Earliest Action Date'];
+    return !ead || ead <= todayStr;
+  }
+
+  // Tasks gated by a future Earliest Action Date are excluded from "next"
+  // and from the open task list entirely — deferred, not just deprioritized.
+  // Once that date passes they're filtered back in here with zero special
+  // treatment, competing on Deadline exactly like anything else.
   function pickNext(tasks: AirtableRecord<TaskFields>[]) {
-    const open = tasks.filter((t) => !t.fields.Done);
+    const open = tasks.filter((t) => !t.fields.Done && isActionable(t));
     if (open.length === 0) return null;
     open.sort((a, b) => {
       const da = a.fields.Deadline,
@@ -139,6 +169,24 @@ export function buildViewModel(
     };
   }
 
+  function toViewTask(t: AirtableRecord<TaskFields>): ViewTask {
+    const dl = deadlineLabel(t.fields.Deadline);
+    const earliestActionDate = t.fields['Earliest Action Date'] || null;
+    const notYetActionable = !isActionable(t);
+    return {
+      id: t.id,
+      label: t.fields.Name,
+      done: !!t.fields.Done,
+      deadline: t.fields.Deadline || null,
+      deadlineLabel: dl.label,
+      overdue: dl.overdue,
+      earliestActionDate,
+      notYetActionable,
+      notYetActionableLabel: notYetActionable ? notYetActionableLabel(earliestActionDate) : null,
+      ...taskContext(t),
+    };
+  }
+
   const hasPrimaryField = pillarRecs.some((p) => typeof p.fields.Primary === 'boolean');
 
   const pillars: ViewPillar[] = pillarRecs.map((p, i) => {
@@ -153,6 +201,26 @@ export function buildViewModel(
           : 0;
       const next = nextTaskByWorkstream.get(w.id) || null;
       const dl = deadlineLabel(next?.fields.Deadline);
+      // Open + actionable first (overdue, then soonest deadline), then
+      // not-yet-actionable (soonest to open first), then done last — so the
+      // workstream's own detail view reads the same way the rest of the app
+      // orders tasks, with deferred ones visible but clearly out of the way.
+      const tasksView = tasks
+        .map(toViewTask)
+        .sort((a, b) => {
+          const rank = (t: ViewTask) => (t.done ? 2 : t.notYetActionable ? 1 : 0);
+          const ra = rank(a);
+          const rb = rank(b);
+          if (ra !== rb) return ra - rb;
+          if (ra === 1) return (a.earliestActionDate || '') < (b.earliestActionDate || '') ? -1 : 1;
+          if (ra === 0) {
+            if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+            if (a.deadline && b.deadline) return a.deadline < b.deadline ? -1 : 1;
+            if (a.deadline) return -1;
+            if (b.deadline) return 1;
+          }
+          return 0;
+        });
       return {
         id: w.id,
         name: w.fields.Name,
@@ -160,6 +228,7 @@ export function buildViewModel(
         pct,
         next: next ? next.fields.Name : 'All caught up here',
         deadlineLabel: dl.label,
+        tasks: tasksView,
       };
     });
     const pct =
@@ -180,19 +249,6 @@ export function buildViewModel(
     };
   });
 
-  function toViewTask(t: AirtableRecord<TaskFields>): ViewTask {
-    const dl = deadlineLabel(t.fields.Deadline);
-    return {
-      id: t.id,
-      label: t.fields.Name,
-      done: !!t.fields.Done,
-      deadline: t.fields.Deadline || null,
-      deadlineLabel: dl.label,
-      overdue: dl.overdue,
-      ...taskContext(t),
-    };
-  }
-
   // First Move: the next task in whichever workstream carries the lowest
   // Priority Order among active pillars — a real Airtable field the Board
   // Meeting writes to on approval, not something living only in the
@@ -207,7 +263,7 @@ export function buildViewModel(
   const firstMove: ViewTask | null = topTask ? toViewTask(topTask) : null;
 
   const openTasks: ViewTask[] = taskRecs
-    .filter((t) => !t.fields.Done)
+    .filter((t) => !t.fields.Done && isActionable(t))
     .map(toViewTask)
     .sort((a, b) => {
       if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
