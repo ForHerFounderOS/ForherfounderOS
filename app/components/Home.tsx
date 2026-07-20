@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { serif, sans } from '@/lib/theme';
-import type { ViewPillar, ViewTask } from '@/lib/model';
+import type { ViewPillar, ViewTask, ViewWorkstream } from '@/lib/model';
 import type { ViewCalDay } from '@/lib/calendarView';
 import TaskDetailModal from './TaskDetail';
+import WorkstreamDetailModal from './WorkstreamDetail';
 
 const GREETING_NAME = '';
 
@@ -95,6 +96,7 @@ export default function Home({
   error,
   onToggleTask,
   firstMove,
+  refresh,
 }: {
   pillars: ViewPillar[];
   openTasks: ViewTask[];
@@ -103,14 +105,18 @@ export default function Home({
   error: string | null;
   onToggleTask: (id: string) => void;
   firstMove: ViewTask | null;
+  refresh: () => void;
 }) {
   const [restOpen, setRestOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [energyLog, setEnergyLog] = useState<EnergyEntry[]>([]);
   const [selectedTask, setSelectedTask] = useState<ViewTask | null>(null);
+  const [selectedWorkstream, setSelectedWorkstream] = useState<{ workstream: ViewWorkstream; pillarName: string; pillarColor: string } | null>(null);
   const [lastVisit, setLastVisit] = useState<Snapshot | null>(null);
   const [lastVisitLoaded, setLastVisitLoaded] = useState(false);
   const [todayCalMinutes, setTodayCalMinutes] = useState<number | null>(null);
+  const [priorityChanging, setPriorityChanging] = useState(false);
+  const [priorityError, setPriorityError] = useState<string | null>(null);
   const snapshotSaved = useRef(false);
 
   useEffect(() => {
@@ -171,6 +177,27 @@ export default function Home({
   const limitedByCalendar = calendarCap < Infinity && calendarCap <= energyCap;
 
   const activePillars = pillars.filter((p) => p.primary || p.active);
+  const priorityOptions = activePillars.flatMap((p) => p.workstreams.map((w) => ({ id: w.id, label: `${p.name} · ${w.name}` })));
+  const handlePriorityChange = async (workstreamId: string) => {
+    if (!workstreamId) return;
+    setPriorityChanging(true);
+    setPriorityError(null);
+    try {
+      const res = await fetch('/api/priority', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workstreamId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Failed to update priority');
+      refresh();
+    } catch (err) {
+      setPriorityError(err instanceof Error ? err.message : 'Failed to update priority');
+    } finally {
+      setPriorityChanging(false);
+    }
+  };
+
   // Rest of today mirrors First Move: nothing's been deliberately planned
   // until a Board Meeting has actually run, so don't dump the raw task list.
   const boardHasRun = !!firstMove;
@@ -438,6 +465,30 @@ export default function Home({
             </div>
           )}
 
+          {/* Change priority — writes Priority Order directly, no Board Meeting needed */}
+          <div style={{ background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, padding: '14px 18px', boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05)' }}>
+            <div style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#A79A8A', marginBottom: 8 }}>
+              Change priority
+            </div>
+            <select
+              value=""
+              onChange={(e) => handlePriorityChange(e.target.value)}
+              disabled={priorityChanging || priorityOptions.length === 0}
+              style={{ width: '100%', fontFamily: sans, fontSize: 13.5, color: '#3A2F24', background: '#FFFDF8', border: '1px solid #DDD2C1', borderRadius: 10, padding: '10px 13px' }}
+            >
+              <option value="">{priorityChanging ? 'Updating…' : 'Set a new priority…'}</option>
+              {priorityOptions.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+            {priorityError && <div style={{ marginTop: 6, fontSize: 12, color: '#A24E2E' }}>{priorityError}</div>}
+            <p style={{ margin: '8px 0 0 0', fontSize: 11.5, color: '#A79A8A', lineHeight: 1.4 }}>
+              Writes Priority Order in Airtable immediately — First move above updates right after.
+            </p>
+          </div>
+
           {/* Rest of today */}
           {!boardHasRun ? (
             <div style={{ background: '#F1EBE0', border: '1px solid #DDD2C1', borderRadius: 14, padding: '20px 22px' }}>
@@ -575,15 +626,22 @@ export default function Home({
 
                 <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column' }}>
                   {visible.map((ws) => (
-                    <div
+                    <button
                       key={ws.id}
+                      onClick={() => setSelectedWorkstream({ workstream: ws, pillarName: pillar.name, pillarColor: pillar.color })}
                       style={{
                         display: 'grid',
                         gridTemplateColumns: 'minmax(150px, 200px) 76px 1fr',
                         gap: 14,
                         alignItems: 'center',
                         padding: '11px 4px',
+                        width: '100%',
+                        border: 'none',
                         borderTop: '1px solid #F3EDE1',
+                        background: 'none',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        fontFamily: 'inherit',
                       }}
                     >
                       <div style={{ fontSize: 13.5, fontWeight: 500, color: '#3A2F24', lineHeight: 1.35 }}>{ws.name}</div>
@@ -599,7 +657,7 @@ export default function Home({
                         </span>
                         {ws.deadlineLabel && <span style={badgeStyle}>{ws.deadlineLabel}</span>}
                       </div>
-                    </div>
+                    </button>
                   ))}
                   {hiddenCount > 0 && (
                     <button
@@ -638,6 +696,19 @@ export default function Home({
 
       {selectedTask && (
         <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} onToggleDone={onToggleTask} />
+      )}
+      {selectedWorkstream && (
+        <WorkstreamDetailModal
+          workstream={selectedWorkstream.workstream}
+          pillarName={selectedWorkstream.pillarName}
+          pillarColor={selectedWorkstream.pillarColor}
+          onClose={() => setSelectedWorkstream(null)}
+          onSelectTask={(t) => {
+            setSelectedWorkstream(null);
+            setSelectedTask(t);
+          }}
+          onToggleDone={onToggleTask}
+        />
       )}
     </div>
   );

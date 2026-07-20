@@ -66,6 +66,7 @@ export default function Page() {
             error={error}
             onToggleTask={toggleTaskDone}
             firstMove={data?.firstMove || null}
+            refresh={refresh}
           />
         )}
         {screen === 'brief' && <DailyBriefing openTasks={openTasks} tasksLoading={loading} tasksError={error} />}
