@@ -1,12 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { serif, sans } from '@/lib/theme';
 import type { ViewPillar, ViewTask } from '@/lib/model';
 import type { ViewCalDay } from '@/lib/calendarView';
+import { dayCapacityMinutes } from '@/lib/calendarView';
 
 export type Decision = { id: number; text: string; recorded?: boolean };
 export type MeetingSnapshot = { workstreamPct: Record<string, number>; completedCount: number };
+// A single task queued for a specific day. taskId set = an existing open
+// task getting a Planned Date; taskId null = a new task, created and
+// planned in one step on approval.
+export type DayPlanItem = { id: number; date: string; text: string; workstreamId: string | null; taskId: string | null };
 export type BoardState = {
   wins: string[];
   outcomes: string[];
@@ -16,6 +21,7 @@ export type BoardState = {
   priorityWorkstreamId: string;
   planRecovery: string;
   decisions: Decision[];
+  dailyPlan: DayPlanItem[];
   lastFinishedDate: string | null;
   lastMeetingSnapshot: MeetingSnapshot | null;
 };
@@ -29,9 +35,31 @@ export const DEFAULT_BOARD_STATE: BoardState = {
   priorityWorkstreamId: '',
   planRecovery: '',
   decisions: [],
+  dailyPlan: [],
   lastFinishedDate: null,
   lastMeetingSnapshot: null,
 };
+
+// This week's 7 dates (Monday-first), matching the order /api/calendar
+// returns days in — so a day card can be paired with its real ISO date to
+// write Planned Date against.
+function thisWeekDates(): string[] {
+  const now = new Date();
+  const dow = now.getDay(); // 0=Sun..6=Sat
+  const mondayOffset = dow === 0 ? -6 : 1 - dow;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + mondayOffset);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+}
+
+function hoursLabel(minutes: number): string {
+  const h = Math.round((minutes / 60) * 2) / 2;
+  return `${h}h`;
+}
 
 function todayKey(): string {
   const d = new Date();
@@ -107,9 +135,16 @@ export default function BoardMeeting({
   const [expandedPillars, setExpandedPillars] = useState<Record<string, boolean>>({});
   const [calDays, setCalDays] = useState<ViewCalDay[] | null>(null);
   const [calError, setCalError] = useState(false);
+  const [dayDrafts, setDayDrafts] = useState<Record<string, { text: string; workstreamId: string }>>({});
+  // A plain counter, not Date.now() — this gets called from inside a .map()
+  // render callback (each day's "add task" handler), and the purity linter
+  // flags Date.now()/Math.random() calls reachable from there even though
+  // they only actually run on a later event, not during render itself.
+  const dayPlanIdCounter = useRef(1);
 
   const activePillars = pillars.filter((p) => p.primary || p.active);
   const workstreamOptions = pillars.flatMap((p) => p.workstreams.map((w) => ({ id: w.id, label: `${p.name} · ${w.name}` })));
+  const weekDates = thisWeekDates();
 
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +192,25 @@ export default function BoardMeeting({
     setBoard({ ...board, decisions: board.decisions.filter((d) => d.id !== id) });
   };
 
+  const addDayTask = (date: string, text: string, workstreamId: string | null, taskId: string | null) => {
+    const id = dayPlanIdCounter.current++;
+    setBoard({ ...board, dailyPlan: [...board.dailyPlan, { id, date, text, workstreamId, taskId }] });
+  };
+  const removeDayTask = (id: number) => {
+    setBoard({ ...board, dailyPlan: board.dailyPlan.filter((d) => d.id !== id) });
+  };
+  const setDayDraft = (date: string, patch: Partial<{ text: string; workstreamId: string }>) => {
+    const current = dayDrafts[date] || { text: '', workstreamId: '' };
+    setDayDrafts({ ...dayDrafts, [date]: { ...current, ...patch } });
+  };
+  const commitDayDraft = (date: string) => {
+    const draft = dayDrafts[date];
+    if (!draft || !draft.text.trim() || !draft.workstreamId) return;
+    addDayTask(date, draft.text.trim(), draft.workstreamId, null);
+    setDayDrafts({ ...dayDrafts, [date]: { text: '', workstreamId: '' } });
+  };
+  const assignedTaskIds = new Set(board.dailyPlan.map((d) => d.taskId).filter((id): id is string => !!id));
+
   // Review Last Week: compares the current, real workstream percentages and
   // completed-task count against a snapshot taken the moment the previous
   // meeting was approved — evidence of what moved, not a feeling about it.
@@ -175,16 +229,28 @@ export default function BoardMeeting({
   movementNotes.sort((a, b) => b.delta - a.delta);
   const completedSinceLast = board.lastMeetingSnapshot ? Math.max(0, stats.completed - board.lastMeetingSnapshot.completedCount) : null;
 
-  // Capacity Check: real ICS-derived load for the coming week, same
-  // durationMinutes data Home uses to trim "Rest of today".
-  const dayLoads = (calDays || []).map((d) => ({
-    name: d.name,
-    minutes: d.events.reduce((sum, e) => (e.allDay ? sum : sum + (e.durationMinutes || 0)), 0),
-    protectedMinutes: d.events.filter((e) => e.protected).reduce((sum, e) => sum + (e.durationMinutes || 0), 0),
-  }));
+  // Capacity Check & daily plan: real ICS-derived load for each day of the
+  // coming week, same durationMinutes data Home uses to trim "Rest of
+  // today" — paired with a real capacity budget per day (see
+  // dayCapacityMinutes) so tasks get assigned against actual room, not a
+  // flat weekly total.
+  const dayLoads = (calDays || []).map((d, i) => {
+    const minutes = d.events.reduce((sum, e) => (e.allDay ? sum : sum + (e.durationMinutes || 0)), 0);
+    const protectedMinutes = d.events.filter((e) => e.protected).reduce((sum, e) => sum + (e.durationMinutes || 0), 0);
+    return {
+      date: weekDates[i],
+      name: d.name,
+      dateNum: d.dateNum,
+      isToday: d.isToday,
+      minutes,
+      protectedMinutes,
+      capacityMinutes: dayCapacityMinutes(minutes),
+    };
+  });
   const totalBookedHours = Math.round((dayLoads.reduce((sum, d) => sum + d.minutes, 0) / 60) * 10) / 10;
   const totalProtectedHours = Math.round((dayLoads.reduce((sum, d) => sum + d.protectedMinutes, 0) / 60) * 10) / 10;
   const busiestDays = [...dayLoads].filter((d) => d.minutes > 0).sort((a, b) => b.minutes - a.minutes).slice(0, 2);
+  const unassignedOpenTasks = openTasks.filter((t) => !assignedTaskIds.has(t.id));
 
   // Close: a real recap of what approval is about to write, so nothing
   // lands in Airtable that wasn't reviewed first.
@@ -198,6 +264,7 @@ export default function BoardMeeting({
   const priorityNextTask = board.priorityWorkstreamId
     ? pillars.flatMap((p) => p.workstreams).find((w) => w.id === board.priorityWorkstreamId)?.next || null
     : null;
+  const dailyPlanDaysUsed = new Set(board.dailyPlan.map((d) => d.date)).size;
 
   const handleFinish = async () => {
     setFinishing(true);
@@ -215,6 +282,7 @@ export default function BoardMeeting({
             taskId: board.outcomeTaskIds[i] || null,
           })),
           decisions: board.decisions.map((d) => ({ id: d.id, text: d.text, recorded: !!d.recorded })),
+          dailyPlan: board.dailyPlan.map((d) => ({ date: d.date, text: d.text, workstreamId: d.workstreamId, taskId: d.taskId })),
           priorityWorkstreamId: board.priorityWorkstreamId || null,
           wins: board.wins,
           planRecovery: board.planRecovery,
@@ -227,11 +295,14 @@ export default function BoardMeeting({
       const outcomeTaskIds: (string | null)[] = json.outcomeTaskIds || board.outcomeTaskIds;
       const decisionsRecorded: number[] = json.decisionsRecorded || [];
       const decisions = board.decisions.map((d) => (decisionsRecorded.includes(d.id) ? { ...d, recorded: true } : d));
+      const dailyPlanTaskIds: (string | null)[] = json.dailyPlanTaskIds || board.dailyPlan.map((d) => d.taskId);
+      const dailyPlan = board.dailyPlan.map((d, i) => ({ ...d, taskId: dailyPlanTaskIds[i] || d.taskId }));
 
       const nextBoard: BoardState = {
         ...board,
         outcomeTaskIds,
         decisions,
+        dailyPlan,
         lastFinishedDate: json.weeklyReviewCreated ? todayKey() : board.lastFinishedDate,
         lastMeetingSnapshot: {
           workstreamPct: Object.fromEntries(pillars.flatMap((p) => p.workstreams.map((w) => [w.id, w.pct]))),
@@ -589,28 +660,126 @@ export default function BoardMeeting({
         </div>
       </section>
 
-      {/* 06 Capacity check */}
+      {/* 06 Capacity check & daily plan */}
       <section style={{ marginTop: 40 }}>
-        {sectionHeader('06', 'Capacity check', 'Against the calendar you actually have, not a guess.')}
-        <div style={{ marginLeft: 30, background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, padding: '16px 22px', boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05)' }}>
+        {sectionHeader(
+          '06',
+          'Capacity check & daily plan',
+          'Real hours, real days — not three outcomes for the whole week and a guess at how they land.'
+        )}
+        <div style={{ marginLeft: 30, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {calError ? (
-            <div style={{ fontSize: 13.5, color: '#A79A8A' }}>Couldn&rsquo;t reach the calendar feed — skipping capacity check.</div>
-          ) : calDays === null ? (
-            <div style={{ fontSize: 13.5, color: '#A79A8A' }}>Reading your week…</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13.5, lineHeight: 1.5, color: '#3A2F24' }}>
-              <div>
-                <strong style={{ fontWeight: 600, color: '#A33757' }}>{totalBookedHours}h</strong> already booked across the
-                coming week
-                {totalProtectedHours ? `, ${totalProtectedHours}h of that protected recovery time` : ''}.
-              </div>
-              {busiestDays.length > 0 && (
-                <div style={{ color: '#7A6E60' }}>
-                  Heaviest: {busiestDays.map((d) => `${d.name} (${Math.round((d.minutes / 60) * 10) / 10}h)`).join(', ')}.
-                  Whatever gets planned above has to fit around that, not on top of it.
-                </div>
-              )}
+            <div style={{ background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, padding: '16px 22px', fontSize: 13.5, color: '#A79A8A' }}>
+              Couldn&rsquo;t reach the calendar feed — skipping the daily planner.
             </div>
+          ) : calDays === null ? (
+            <div style={{ background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, padding: '16px 22px', fontSize: 13.5, color: '#A79A8A' }}>
+              Reading your week…
+            </div>
+          ) : (
+            <>
+              <div style={{ background: '#FFFDF8', border: '1px solid #EAE2D6', borderRadius: 14, padding: '16px 22px', boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13.5, lineHeight: 1.5, color: '#3A2F24' }}>
+                  <div>
+                    <strong style={{ fontWeight: 600, color: '#A33757' }}>{totalBookedHours}h</strong> already booked across the
+                    coming week
+                    {totalProtectedHours ? `, ${totalProtectedHours}h of that protected recovery time` : ''}.
+                  </div>
+                  {busiestDays.length > 0 && (
+                    <div style={{ color: '#7A6E60' }}>
+                      Heaviest: {busiestDays.map((d) => `${d.name} (${hoursLabel(d.minutes)})`).join(', ')}.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {dayLoads.map((day) => {
+                const assigned = board.dailyPlan.filter((item) => item.date === day.date);
+                const draft = dayDrafts[day.date] || { text: '', workstreamId: '' };
+                const lightDay = assigned.length === 1 && day.capacityMinutes >= 180;
+                return (
+                  <div key={day.date} style={{ background: '#FFFDF8', border: `1px solid ${day.isToday ? '#D9C7B3' : '#EAE2D6'}`, borderRadius: 14, padding: '16px 22px', boxShadow: '0 1px 2px rgba(43, 33, 24, 0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span style={{ fontFamily: serif, fontSize: 15.5, color: '#2B2118' }}>
+                        {day.name} {day.dateNum}
+                        {day.isToday && <span style={{ marginLeft: 6, fontSize: 10.5, color: '#A33757', fontWeight: 600 }}>TODAY</span>}
+                      </span>
+                      <span style={smallBadge}>{hoursLabel(day.capacityMinutes)} available</span>
+                    </div>
+
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {assigned.map((item) => (
+                        <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 13, color: '#3A2F24', background: '#FBF7EE', borderRadius: 8, padding: '7px 11px' }}>
+                          <span>{item.text}</span>
+                          <button
+                            onClick={() => removeDayTask(item.id)}
+                            title="Remove"
+                            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#A79A8A', fontSize: 13, lineHeight: 1, padding: 2, flexShrink: 0 }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      {assigned.length === 0 && <div style={{ fontSize: 12.5, color: '#A79A8A' }}>Nothing queued.</div>}
+                      {lightDay && (
+                        <div style={{ fontSize: 12, color: '#A24E2E' }}>
+                          {`Just one task for a day with ${hoursLabel(day.capacityMinutes)} open — worth adding more.`}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const task = unassignedOpenTasks.find((t) => t.id === e.target.value);
+                          if (task) addDayTask(day.date, task.label, null, task.id);
+                        }}
+                        style={{ fontFamily: sans, fontSize: 12.5, color: '#5C5145', background: '#FFFDF8', border: '1px solid #DDD2C1', borderRadius: 8, padding: '7px 10px' }}
+                      >
+                        <option value="">Add an open task…</option>
+                        {unassignedOpenTasks.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <input
+                          value={draft.text}
+                          onChange={(e) => setDayDraft(day.date, { text: e.target.value })}
+                          onKeyDown={(e) => e.key === 'Enter' && commitDayDraft(day.date)}
+                          placeholder="Or type a new task for this day…"
+                          style={{ flex: 1, fontFamily: sans, fontSize: 12.5, color: '#3A2F24', background: '#FFFDF8', border: '1px dashed #CBBFAC', borderRadius: 8, padding: '7px 10px' }}
+                        />
+                      </div>
+                      {draft.text.trim() && (
+                        <select
+                          value={draft.workstreamId}
+                          onChange={(e) => setDayDraft(day.date, { workstreamId: e.target.value })}
+                          style={{ fontFamily: sans, fontSize: 12.5, color: '#5C5145', background: '#FFFDF8', border: '1px solid #DDD2C1', borderRadius: 8, padding: '7px 10px' }}
+                        >
+                          <option value="">Which workstream?</option>
+                          {workstreamOptions.map((w) => (
+                            <option key={w.id} value={w.id}>
+                              {w.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {draft.text.trim() && draft.workstreamId && (
+                        <button
+                          onClick={() => commitDayDraft(day.date)}
+                          style={{ alignSelf: 'flex-start', border: 'none', cursor: 'pointer', background: '#F1EBE0', color: '#5C5145', fontFamily: sans, fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 8 }}
+                        >
+                          Add to {day.name}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
       </section>
@@ -653,6 +822,12 @@ export default function BoardMeeting({
               {outcomesToCreate.length > 0
                 ? `${outcomesToCreate.length} outcome${outcomesToCreate.length === 1 ? '' : 's'} will become real tasks${outcomesAlreadyDone ? `, ${outcomesAlreadyDone} already marked done` : ''}.`
                 : 'No new outcome tasks to create.'}
+            </li>
+            <li style={{ display: 'flex', gap: 9 }}>
+              <span style={{ color: '#FB9590' }}>✦</span>
+              {board.dailyPlan.length > 0
+                ? `${board.dailyPlan.length} task${board.dailyPlan.length === 1 ? '' : 's'} planned across ${dailyPlanDaysUsed} day${dailyPlanDaysUsed === 1 ? '' : 's'}.`
+                : 'No daily plan set — nothing assigned to specific days this week.'}
             </li>
             <li style={{ display: 'flex', gap: 9 }}>
               <span style={{ color: '#FB9590' }}>✦</span>

@@ -1,14 +1,10 @@
 import type { ViewTask } from './model';
+import { formatLongDate } from './dateFormat';
 
 export type BriefCalEvent = { time: string; label: string };
 
 function dayLabel(now: Date): string {
-  return now.toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'Europe/London',
-  });
+  return formatLongDate(now, 'Europe/London');
 }
 
 export function formatBriefSubject(now: Date = new Date()): string {
@@ -17,9 +13,13 @@ export function formatBriefSubject(now: Date = new Date()): string {
 
 // Plain text email body — no markdown/HTML. Warm but brief, like an
 // experienced personal assistant: lead with what matters, no chatter.
-// openTasks is expected pre-sorted overdue-first then by soonest deadline
-// (see buildViewModel), so openTasks[0] is already the right First Move.
+// firstMove is the same Priority-Order-driven task the app shows everywhere
+// else (buildViewModel's firstMove) — not just whichever task happens to
+// have the soonest deadline. Nothing set at the Board Meeting yet means no
+// priority has been chosen, and the email says so honestly instead of
+// picking an unrelated task and calling it First Move.
 export function formatBriefMessage(
+  firstMove: ViewTask | null,
   openTasks: ViewTask[],
   calendarEvents: BriefCalEvent[] = [],
   now: Date = new Date()
@@ -44,16 +44,17 @@ export function formatBriefMessage(
     return lines.join('\n');
   }
 
-  const [firstMove, ...restAll] = openTasks;
-  const rest = restAll.slice(0, 3);
+  const rest = openTasks.filter((t) => t.id !== firstMove?.id).slice(0, 3);
   const overdueTasks = openTasks.filter((t) => t.overdue);
 
   lines.push('');
   lines.push('First Move:');
   lines.push(
-    `${firstMove.label} (${firstMove.pillarName}${
-      firstMove.workstreamName ? ' · ' + firstMove.workstreamName : ''
-    })${firstMove.deadlineLabel ? ' — ' + firstMove.deadlineLabel : ''}`
+    firstMove
+      ? `${firstMove.label} (${firstMove.pillarName}${
+          firstMove.workstreamName ? ' · ' + firstMove.workstreamName : ''
+        })${firstMove.deadlineLabel ? ' — ' + firstMove.deadlineLabel : ''}`
+      : 'No priority set yet — runs at Sunday’s Board Meeting.'
   );
 
   if (rest.length) {

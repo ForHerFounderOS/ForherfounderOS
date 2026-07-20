@@ -2,10 +2,11 @@
 
 import { serif, sans } from '@/lib/theme';
 import type { ViewTask } from '@/lib/model';
+import { formatLongDate } from '@/lib/dateFormat';
 
 function formattedDeadline(iso: string | null): string {
   if (!iso) return '';
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  return formatLongDate(new Date(iso + 'T00:00:00'));
 }
 
 export default function TaskDetailModal({

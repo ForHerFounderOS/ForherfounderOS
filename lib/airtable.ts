@@ -66,6 +66,7 @@ export type TaskFields = {
   Deadline?: string; // ISO date
   Estimate?: number; // minutes
   'Earliest Action Date'?: string; // ISO date — task isn't actionable before this
+  'Planned Date'?: string; // ISO date — the specific day this task is queued for
 };
 export type ParkingLotFields = {
   Item: string;
@@ -109,13 +110,21 @@ export function updateTaskDone(id: string, done: boolean) {
   });
 }
 
-export function createTask(workstreamId: string, name: string, deadline?: string | null) {
+export function createTask(workstreamId: string, name: string, deadline?: string | null, plannedDate?: string | null) {
   const fields: Record<string, unknown> = { Name: name, Workstream: [workstreamId] };
   if (deadline) fields.Deadline = deadline;
+  if (plannedDate) fields['Planned Date'] = plannedDate;
   return airtableFetch(`/${encodeURIComponent(TABLES.tasks)}`, {
     method: 'POST',
     body: JSON.stringify({ fields, typecast: true }),
   }) as Promise<AirtableRecord<TaskFields>>;
+}
+
+export function updateTaskPlannedDate(id: string, plannedDate: string) {
+  return airtableFetch(`/${encodeURIComponent(TABLES.tasks)}/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ fields: { 'Planned Date': plannedDate }, typecast: true }),
+  });
 }
 
 export function updatePillarActive(id: string, active: boolean) {
