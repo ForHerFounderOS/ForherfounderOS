@@ -134,6 +134,16 @@ export function clearTaskPlannedDate(id: string) {
   });
 }
 
+// Re-links a task to a different workstream — for pulling an existing task
+// out of the backlog to become the priority workstream's job, instead of
+// writing a brand-new task from scratch.
+export function moveTaskToWorkstream(id: string, workstreamId: string) {
+  return airtableFetch(`/${encodeURIComponent(TABLES.tasks)}/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ fields: { Workstream: [workstreamId] }, typecast: true }),
+  });
+}
+
 export function updatePillarActive(id: string, active: boolean) {
   return airtableFetch(`/${encodeURIComponent(TABLES.pillars)}/${id}`, {
     method: 'PATCH',
