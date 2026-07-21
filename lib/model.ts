@@ -18,6 +18,7 @@ export type ViewTask = {
   id: string;
   label: string;
   pillarName: string;
+  workstreamId: string | null;
   workstreamName: string;
   workstreamDescription: string | null;
   isNext: boolean;
@@ -173,6 +174,7 @@ export function buildViewModel(
     const isNext = !!next && next.id === t.id;
     return {
       pillarName: pillar?.fields.Name || 'Unassigned',
+      workstreamId: wsId || null,
       workstreamName: ws?.fields.Name || '',
       workstreamDescription: ws?.fields.Description || null,
       isNext,

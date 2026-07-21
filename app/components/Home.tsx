@@ -126,9 +126,8 @@ export default function Home({
   const [todayCalMinutes, setTodayCalMinutes] = useState<number | null>(null);
   const [priorityChanging, setPriorityChanging] = useState(false);
   const [priorityError, setPriorityError] = useState<string | null>(null);
-  const [newTaskText, setNewTaskText] = useState('');
-  const [addingTask, setAddingTask] = useState(false);
-  const [addTaskError, setAddTaskError] = useState<string | null>(null);
+  const [movingTask, setMovingTask] = useState(false);
+  const [moveTaskError, setMoveTaskError] = useState<string | null>(null);
   const snapshotSaved = useRef(false);
 
   useEffect(() => {
@@ -218,27 +217,30 @@ export default function Home({
     }
   };
 
-  // Backs the inline "Add a task" box that shows up when the priority
-  // workstream has caught up — the First Move message says you can add one
-  // right there, so there has to actually be a place to do it.
-  const handleAddTask = async () => {
-    if (!newTaskText.trim() || !priorityWorkstreamId) return;
-    setAddingTask(true);
-    setAddTaskError(null);
+  // What "Move a task here" can actually offer: open tasks that don't
+  // already belong to the priority workstream.
+  const movableTasks = priorityWorkstreamId ? openTasks.filter((t) => t.workstreamId !== priorityWorkstreamId) : [];
+
+  // Backs the "Move a task here" picker that shows up when the priority
+  // workstream has caught up — pulls an existing open task in from
+  // elsewhere in the backlog rather than writing a brand-new one.
+  const handleMoveTask = async (taskId: string) => {
+    if (!taskId || !priorityWorkstreamId) return;
+    setMovingTask(true);
+    setMoveTaskError(null);
     try {
-      const res = await fetch('/api/tasks/create', {
+      const res = await fetch('/api/tasks/move', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workstreamId: priorityWorkstreamId, text: newTaskText.trim() }),
+        body: JSON.stringify({ taskId, workstreamId: priorityWorkstreamId }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error || 'Failed to add task');
-      setNewTaskText('');
+      if (!res.ok) throw new Error(json.error || 'Failed to move task');
       refresh();
     } catch (err) {
-      setAddTaskError(err instanceof Error ? err.message : 'Failed to add task');
+      setMoveTaskError(err instanceof Error ? err.message : 'Failed to move task');
     } finally {
-      setAddingTask(false);
+      setMovingTask(false);
     }
   };
 
@@ -513,26 +515,24 @@ export default function Home({
                 {priorityWorkstreamName} is your priority, but it has no open tasks right now.
               </div>
               <div style={{ marginTop: 6, fontSize: 12.5, color: '#A79A8A', lineHeight: 1.5 }}>
-                Add a task to it, or change priority in the panel below.
+                Move a task here from the backlog, or change priority in the panel below.
               </div>
-              <div style={{ marginTop: 12, display: 'flex', gap: 6 }}>
-                <input
-                  value={newTaskText}
-                  onChange={(e) => setNewTaskText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
-                  placeholder={`Add a task to ${priorityWorkstreamName}…`}
-                  disabled={addingTask}
-                  style={{ flex: 1, fontFamily: sans, fontSize: 13, color: '#3A2F24', background: '#FFFDF8', border: '1px solid #DDD2C1', borderRadius: 9, padding: '8px 12px' }}
-                />
-                <button
-                  onClick={handleAddTask}
-                  disabled={addingTask || !newTaskText.trim()}
-                  style={{ border: 'none', cursor: addingTask || !newTaskText.trim() ? 'default' : 'pointer', background: '#A33757', color: '#FFF3EC', fontFamily: sans, fontSize: 12.5, fontWeight: 600, padding: '8px 16px', borderRadius: 9, opacity: addingTask || !newTaskText.trim() ? 0.6 : 1 }}
-                >
-                  {addingTask ? 'Adding…' : 'Add'}
-                </button>
-              </div>
-              {addTaskError && <div style={{ marginTop: 6, fontSize: 12, color: '#A24E2E' }}>{addTaskError}</div>}
+              <select
+                value=""
+                onChange={(e) => e.target.value && handleMoveTask(e.target.value)}
+                disabled={movingTask || movableTasks.length === 0}
+                style={{ marginTop: 12, width: '100%', fontFamily: sans, fontSize: 13, color: '#3A2F24', background: '#FFFDF8', border: '1px solid #DDD2C1', borderRadius: 9, padding: '8px 12px' }}
+              >
+                <option value="">
+                  {movingTask ? 'Moving…' : movableTasks.length === 0 ? 'Nothing else in the backlog to move' : `Move a task to ${priorityWorkstreamName}…`}
+                </option>
+                {movableTasks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label} — {t.workstreamName}
+                  </option>
+                ))}
+              </select>
+              {moveTaskError && <div style={{ marginTop: 6, fontSize: 12, color: '#A24E2E' }}>{moveTaskError}</div>}
             </div>
           ) : (
             <div style={{ background: '#F1EBE0', border: '1px solid #DDD2C1', borderRadius: 14, padding: '20px 22px' }}>
